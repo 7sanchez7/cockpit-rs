@@ -77,9 +77,9 @@ export function bouton(libelle, faire) {
 
 /**
  * Une vidéo de grille : miniature 9:16 voilée en bas, vues, logo, mesure du tri en pastille ; dessous, `legende`
- * sur `lignes` lignes. `stats` ([{ nom, valeur }]) couvre la miniature au survol.
+ * sur `lignes` lignes.
  */
-export function caseVideo({ cles, plateforme, vues, badge, badgeCouleur, legende, lignes, choisie, aide, stats, clic }) {
+export function caseVideo({ cles, plateforme, vues, badge, badgeCouleur, legende, lignes, choisie, aide, clic }) {
   return h(
     "button",
     { class: "case-video survolable" + (choisie ? " choisie" : ""), title: aide, onclick: clic },
@@ -91,7 +91,6 @@ export function caseVideo({ cles, plateforme, vues, badge, badgeCouleur, legende
       h("span", { class: "vues" }, h("span", { class: "lecture" }, "▶"), vues),
       h("span", { class: "logo-coin" }, logoPlateforme(plateforme)),
       badge != null && h("span", { class: "badge pastille", style: { "--c": badgeCouleur } }, badge),
-      stats && h("span", { class: "stats" }, stats.map((s) => h("span", { class: "stat" }, h("span", null, s.nom), h("span", { class: "valeur" }, s.valeur)))),
     ),
     h("span", { class: "legende", style: { "--lignes": lignes } }, legende),
   );

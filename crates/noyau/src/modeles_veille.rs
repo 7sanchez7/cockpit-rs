@@ -164,6 +164,13 @@ impl VideoVeille {
     pub fn pull(&self) -> Option<f64> {
         ScoreVeille::pull(self.vues, self.likes, self.commentaires, self.partages, self.enregistrements)
     }
+    /// (likes + commentaires + partages + enregistrements) / vues.
+    pub fn engagement(&self) -> Option<f64> {
+        let vues = self.vues.filter(|v| *v > 0)?;
+        let actes = [self.likes, self.commentaires, self.partages, self.enregistrements];
+        if actes.iter().all(Option::is_none) { return None; }
+        Some(actes.iter().flatten().sum::<i64>() as f64 / vues as f64)
+    }
     pub fn outlier(&self) -> bool { ScoreVeille::outlier(self.ratio(), self.vues, self.pull()) }
     /// Vaut une analyse de Claude : outlier, ou au moins `RATIO_PERCEE` fois la médiane de son compte.
     pub fn a_analyser(&self) -> bool { self.outlier() || self.ratio().is_some_and(|r| r >= ScoreVeille::RATIO_PERCEE) }
@@ -182,6 +189,9 @@ pub struct AnalyseVeille {
     pub probleme: String,
     pub format: String,
     pub blocs: Blocs,
+    /// La part de la durée de chaque bloc, en % ; absente des analyses d'avant le 19 nov. 2026.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parts: Option<Parts>,
     pub ecart: String,
     pub adaptable: i64,
     pub idee: String,
@@ -194,6 +204,15 @@ pub struct Blocs {
     pub valeur: String,
     pub placement: String,
     pub fin: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Parts {
+    pub hook: i64,
+    pub confirmation: i64,
+    pub valeur: i64,
+    pub placement: i64,
+    pub fin: i64,
 }
 
 impl AnalyseVeille {

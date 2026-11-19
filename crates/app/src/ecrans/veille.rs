@@ -1,5 +1,5 @@
-//! Veille : les vidéos qui montent sur les mots-clés suivis, triées et filtrées, et le détail de la vidéo choisie
-//! avec l'analyse de Claude, et le lecteur (docs/ecrans.md § Veille).
+//! Veille : les vidéos qui montent sur les mots-clés suivis, triées et filtrées, leur carte au survol et leur fiche
+//! au clic, avec l'analyse de Claude et le lecteur (docs/ecrans.md § Veille).
 use crate::commandes::{texte, Rep};
 use crate::ecrans::lectures;
 use crate::Etat;
@@ -31,8 +31,6 @@ pub struct EcranVeille {
     videos: Vec<CaseVeille>,
     /// Aucun mot-clé : la grille invite à en ajouter un.
     sans_mot: bool,
-    choisie: Option<String>,
-    detail: Option<DetailVeille>,
     curseur: Curseur,
     /// La dernière demande à Claude du business, au-dessus de la grille.
     demande: Option<DemandeEcran>,
@@ -98,19 +96,42 @@ pub struct CaseVeille {
     badge: Option<String>,
     outlier: bool,
     legende: String,
-    /// Les chiffres connus de la vidéo, sur la miniature au survol.
-    stats: Vec<Stat>,
+    /// La carte au survol de la miniature.
+    carte: Carte,
 }
 
 #[derive(Serialize)]
-pub struct Stat {
+pub struct Carte {
+    compte: String,
+    /// « il y a 3 j · TikTok · 42 s ».
+    meta: String,
+    chiffres: Vec<Chiffre>,
+    /// Les blocs du script ; vide sans analyse.
+    anatomie: Vec<Segment>,
+    /// Sans analyse : pourquoi.
+    attente: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct Chiffre {
     nom: &'static str,
     valeur: String,
+    succes: bool,
 }
 
 #[derive(Serialize)]
+pub struct Segment {
+    nom: &'static str,
+    couleur: &'static str,
+    texte: String,
+    /// La part de la durée en %, inconnue des analyses d'avant le 19 nov. 2026 : la barre les montre à parts égales.
+    part: Option<i64>,
+}
+
+/// La fenêtre ouverte au clic sur une vidéo.
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DetailVeille {
+pub struct FicheVeille {
     id: String,
     plateforme: Plateforme,
     nom_plateforme: &'static str,
@@ -118,18 +139,17 @@ pub struct DetailVeille {
     url: String,
     compte: String,
     meta: String,
+    mot: Option<String>,
     legende: Option<String>,
-    mesures: Vec<LigneMesure>,
+    /// « 15,8 % ».
+    engagement: Option<String>,
+    /// « Top 6 % de la bibliothèque ».
+    rang: Option<String>,
+    chiffres: Vec<Chiffre>,
+    anatomie: Vec<Segment>,
     analyse: Option<Analyse>,
-    /// Sans analyse : pourquoi.
     attente: &'static str,
-}
-
-#[derive(Serialize)]
-pub struct LigneMesure {
-    nom: &'static str,
-    valeur: Option<String>,
-    succes: bool,
+    similaires: Vec<CaseVeille>,
 }
 
 #[derive(Serialize)]
@@ -152,6 +172,9 @@ pub struct Section {
     fort: bool,
 }
 
+/// Les vidéos proches montrées sous une fiche.
+const SIMILAIRES: usize = 8;
+
 #[tauri::command]
 pub async fn veille(
     etat: State<'_, Etat>,
@@ -160,7 +183,6 @@ pub async fn veille(
     plateforme: Option<Plateforme>,
     outliers: bool,
     mot: Option<String>,
-    choisie: Option<String>,
 ) -> Rep<EcranVeille> {
     let l = lectures(&etat.store, business.as_deref())?;
     let m = l.maintenant;
@@ -177,9 +199,6 @@ pub async fn veille(
         Some(d) => l.retenues_veille(&d.id).map_err(texte)?,
         None => vec![],
     };
-    // le détail montre aussi une vidéo retenue hors de la grille (plus vieille que 30 j, sous les filtres)
-    let montrables = || liste.iter().copied().chain(retenues.iter().map(|(v, _)| v));
-    let choisie = choisie.filter(|id| montrables().any(|v| &v.id == id)).or_else(|| liste.first().map(|v| v.id.clone()));
     Ok(EcranVeille {
         sous_titre: sous_titre(&mots, &toutes, &m),
         mots: mots.iter().map(|w| pilule(w, &toutes, &m)).collect(),
@@ -188,8 +207,6 @@ pub async fn veille(
         mot,
         videos: liste.iter().map(|v| case(v, tri, &m)).collect(),
         sans_mot: mots.is_empty(),
-        detail: montrables().find(|v| Some(&v.id) == choisie.as_ref()).map(|v| detail(v, &m)),
-        choisie,
         curseur: Curseur { min: VIDEOS_MIN, max: VIDEOS_MAX, pas: VIDEOS_PAS, valeur: videos_par_mot(&etat.store).map_err(texte)? },
         demande: match demande {
             Some(d) => {
@@ -270,6 +287,16 @@ pub async fn retirer_mot(etat: State<'_, Etat>, business: String, mot: String) -
     Ok(())
 }
 
+/// La fiche d'une vidéo, de la grille ou retenue par une demande (même plus vieille que 30 j).
+#[tauri::command]
+pub async fn fiche_veille(etat: State<'_, Etat>, business: Option<String>, id: String) -> Rep<FicheVeille> {
+    let l = lectures(&etat.store, business.as_deref())?;
+    let v = etat.store.videos_veille("where v.id = ?", p![id]).map_err(texte)?.into_iter().next()
+        .ok_or("vidéo absente de la veille")?;
+    let toutes = l.videos_veille(JOURS).map_err(texte)?;
+    Ok(fiche(&v, &toutes, &l.maintenant))
+}
+
 /// Le fichier de la vidéo, téléchargé à la demande dans le cache (`analyse::fichier`), pour le lecteur de l'écran ;
 /// la seule commande de la Veille qui parle au réseau.
 #[tauri::command]
@@ -339,52 +366,113 @@ fn case(v: &VideoVeille, tri: Tri, m: &Date) -> CaseVeille {
         badge: badge(v, tri, m),
         outlier: v.outlier(),
         legende: format!("@{}{}", v.compte, if v.analyse.is_some() { " ✦" } else { "" }),
-        stats: stats(v, m),
+        carte: Carte {
+            compte: format!("@{}", v.compte),
+            meta: meta(v, m),
+            chiffres: chiffres(v, &[
+                ("Vues", v.vues.map(|n| format::compact(n as f64))),
+                ("Likes", v.likes.map(|n| format::compact(n as f64))),
+                ("Likes / 1k vues", v.likes.zip(v.vues.filter(|n| *n > 0)).map(|(l, n)| format::decimal(l as f64 * 1000.0 / n as f64, 1))),
+            ]),
+            anatomie: v.analyse.as_ref().map(anatomie).unwrap_or_default(),
+            attente: attente(v),
+        },
     }
 }
 
-/// Publiée, vues, likes, commentaires, partages, enregistrements, × médiane, vues/h, durée : ceux qui sont connus.
-fn stats(v: &VideoVeille, m: &Date) -> Vec<Stat> {
-    let compte = |n: Option<i64>| n.map(|n| format::compact(n as f64));
-    [
-        ("Publiée", v.publiee.map(|d| format::il_ya(&d, m))),
-        ("Vues", v.vues.map(|n| format::entier(n as f64))),
-        ("Likes", compte(v.likes)),
-        ("Commentaires", compte(v.commentaires)),
-        ("Partages", compte(v.partages)),
-        ("Enregistrements", compte(v.enregistrements)),
-        ("× médiane", v.ratio().map(|r| format!("{}×", format::decimal(r, 1)))),
-        ("Vues/h", v.vitesse.map(format::compact)),
-        ("Durée", v.duree_s.map(format::duree)),
-    ].into_iter().filter_map(|(nom, valeur)| Some(Stat { nom, valeur: valeur? })).collect()
+/// « il y a 3 j · TikTok · 42 s ».
+fn meta(v: &VideoVeille, m: &Date) -> String {
+    [v.publiee.map(|d| format::il_ya(&d, m)), Some(v.plateforme.nom().to_string()), v.duree_s.map(format::duree)]
+        .into_iter().flatten().collect::<Vec<_>>().join(" · ")
 }
 
-fn detail(v: &VideoVeille, m: &Date) -> DetailVeille {
-    let meta = [v.mot.as_ref().map(|w| format!("« {w} »")), v.publiee.map(|d| format::age(&d, m)), v.duree_s.map(format::duree)]
-        .into_iter().flatten().collect::<Vec<_>>().join(" · ");
-    let entier = |n: Option<i64>| n.map(|n| format::entier(n as f64));
-    DetailVeille {
+/// Les chiffres connus ; le × médiane d'un outlier se lit en vert.
+fn chiffres(v: &VideoVeille, liste: &[(&'static str, Option<String>)]) -> Vec<Chiffre> {
+    liste.iter().filter_map(|(nom, valeur)| Some(Chiffre { nom, valeur: valeur.clone()?, succes: *nom == "× médiane" && v.outlier() })).collect()
+}
+
+fn attente(v: &VideoVeille) -> &'static str {
+    if v.a_analyser() { "Analyse au prochain passage (clé Anthropic du business)." } else { "Analysée à partir de 2× la médiane du compte." }
+}
+
+fn fiche(v: &VideoVeille, toutes: &[VideoVeille], m: &Date) -> FicheVeille {
+    let compte = |n: Option<i64>| n.map(|n| format::compact(n as f64));
+    FicheVeille {
         id: v.id.clone(),
         plateforme: v.plateforme,
         nom_plateforme: v.plateforme.nom(),
         cles: miniatures::cles(&v.id, v.plateforme),
         url: v.url.clone(),
         compte: format!("@{}", v.compte),
-        meta,
-        legende: v.legende.clone(),
-        mesures: vec![
-            LigneMesure { nom: "Vues", valeur: entier(v.vues), succes: false },
-            LigneMesure { nom: "Médiane du compte", valeur: entier(v.mediane), succes: false },
-            LigneMesure { nom: "× médiane", valeur: v.ratio().map(|r| format!("{}×", format::decimal(r, 1))), succes: v.outlier() },
-            LigneMesure { nom: "Pull", valeur: v.pull().map(|p| format::pourcent(p, 1)), succes: false },
-            LigneMesure { nom: "Vues/h", valeur: v.vitesse.map(format::compact), succes: false },
-            LigneMesure { nom: "Abonnés", valeur: v.abonnes.map(|n| format::compact(n as f64)), succes: false },
-        ],
+        meta: meta(v, m),
+        mot: v.mot.clone(),
+        legende: v.legende.clone().filter(|l| !l.trim().is_empty()),
+        engagement: v.engagement().map(|e| format::pourcent(e, 1)),
+        rang: rang(v, toutes),
+        chiffres: chiffres(v, &[
+            ("Vues", v.vues.map(|n| format::entier(n as f64))),
+            ("Likes", compte(v.likes)),
+            ("Commentaires", compte(v.commentaires)),
+            ("Partages", compte(v.partages)),
+            ("Enregistrements", compte(v.enregistrements)),
+            ("× médiane", v.ratio().map(|r| format!("{}×", format::decimal(r, 1)))),
+            ("Médiane du compte", compte(v.mediane)),
+            ("Vues/h", v.vitesse.map(format::compact)),
+            ("Abonnés", compte(v.abonnes)),
+            ("Pull", v.pull().map(|p| format::pourcent(p, 1))),
+        ]),
+        anatomie: v.analyse.as_ref().map(anatomie).unwrap_or_default(),
         analyse: v.analyse.as_ref().map(analyse),
-        attente: if v.a_analyser() { "Analyse au prochain passage (clé Anthropic du business)." } else { "Analysée à partir de 2× la médiane du compte." },
+        attente: attente(v),
+        similaires: similaires(v, toutes, m),
     }
 }
 
+/// La place de l'engagement de `v` parmi les vidéos de la veille qui en ont un ; la moitié basse ne se classe pas.
+fn rang(v: &VideoVeille, toutes: &[VideoVeille]) -> Option<String> {
+    let e = v.engagement()?;
+    let autres: Vec<f64> = toutes.iter().filter(|x| x.id != v.id).filter_map(VideoVeille::engagement).collect();
+    if autres.is_empty() {
+        return None;
+    }
+    let devant = autres.iter().filter(|x| **x > e).count();
+    let top = ((devant + 1) as f64 * 100.0 / (autres.len() + 1) as f64).ceil() as i64;
+    Some(if top <= 50 { format!("Top {top} % de la bibliothèque") } else { "Moitié basse de la bibliothèque".into() })
+}
+
+/// Même mot-clé ou même format d'analyse, les plus fortes d'abord.
+fn similaires(v: &VideoVeille, toutes: &[VideoVeille], m: &Date) -> Vec<CaseVeille> {
+    let format = |x: &VideoVeille| x.analyse.as_ref().map(|a| a.format.clone());
+    let mut proches: Vec<&VideoVeille> = toutes.iter()
+        .filter(|x| x.id != v.id)
+        .filter(|x| (v.mot.is_some() && x.mot == v.mot) || (format(v).is_some() && format(x) == format(v)))
+        .collect();
+    trier(&mut proches, Tri::Ratio);
+    proches.into_iter().take(SIMILAIRES).map(|x| case(x, Tri::Ratio, m)).collect()
+}
+
+/// Les blocs présents du script, leurs parts ramenées à 100.
+fn anatomie(a: &AnalyseVeille) -> Vec<Segment> {
+    let (b, p) = (&a.blocs, a.parts.as_ref());
+    let blocs = [
+        ("Hook", "ambre", &b.hook, p.map(|p| p.hook)),
+        ("Confirmation", "bleu", &b.confirmation, p.map(|p| p.confirmation)),
+        ("Valeur", "succes", &b.valeur, p.map(|p| p.valeur)),
+        ("Placement", "violet", &b.placement, p.map(|p| p.placement)),
+        ("Fin", "orange", &b.fin, p.map(|p| p.fin)),
+    ];
+    let presents: Vec<_> = blocs.into_iter().filter(|(_, _, texte, part)| !absent(texte) && part.is_none_or(|n| n > 0)).collect();
+    let total: i64 = presents.iter().filter_map(|s| s.3).sum();
+    presents.into_iter()
+        .map(|(nom, couleur, texte, part)| Segment { nom, couleur, texte: texte.clone(), part: part.filter(|_| total > 0).map(|n| (n as f64 * 100.0 / total as f64).round() as i64) })
+        .collect()
+}
+
+fn absent(texte: &str) -> bool {
+    texte.trim().trim_end_matches('.').eq_ignore_ascii_case("absent")
+}
+
+/// Hook, problème, ce qui change, l'idée ; les blocs passent par l'anatomie.
 fn analyse(a: &AnalyseVeille) -> Analyse {
     let section = |titre, texte: &str| Section { titre, texte: texte.into(), fort: false };
     let hook = format!("« {} »", a.hook) + &if a.texte_ecran.is_empty() { String::new() } else { format!("\nÀ l'écran : {}", a.texte_ecran) };
@@ -398,12 +486,43 @@ fn analyse(a: &AnalyseVeille) -> Analyse {
         sections: vec![
             section("Hook", &hook),
             section("Problème", &a.probleme),
-            section("Confirmation", &a.blocs.confirmation),
-            section("Valeur", &a.blocs.valeur),
-            section("Placement", &a.blocs.placement),
-            section("Fin", &a.blocs.fin),
             section("Ce qui change", &a.ecart),
             Section { titre: "À tourner", texte: a.idee.clone(), fort: true },
         ],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn video(id: &str, vues: i64, likes: i64) -> VideoVeille {
+        VideoVeille {
+            id: id.into(), business: "b".into(), plateforme: Plateforme::Tiktok, compte: "c".into(), url: String::new(),
+            legende: None, publiee: None, duree_s: None, mot: None, trouvee: noyau::jour::maintenant(), media: None,
+            vues: Some(vues), likes: Some(likes), commentaires: None, partages: None, enregistrements: None,
+            releve_le: None, mediane: None, abonnes: None, vitesse: None, analyse: None,
+        }
+    }
+
+    #[test]
+    fn rang_dans_la_bibliotheque() {
+        let toutes: Vec<_> = (1..=19).map(|i| video(&i.to_string(), 1000, i)).collect();
+        assert_eq!(rang(&video("x", 1000, 100), &toutes).as_deref(), Some("Top 5 % de la bibliothèque"));
+        assert_eq!(rang(&video("x", 1000, 0), &toutes).as_deref(), Some("Moitié basse de la bibliothèque"));
+        assert_eq!(rang(&video("x", 1000, 5), &[]), None);
+    }
+
+    #[test]
+    fn anatomie_sans_blocs_absents() {
+        let mut a: AnalyseVeille = serde_json::from_value(serde_json::json!({
+            "hook": "h", "hookType": "question", "hookVisuel": "face", "texteEcran": "", "probleme": "p", "format": "f",
+            "blocs": { "hook": "h", "confirmation": "c", "valeur": "v", "placement": "Absent.", "fin": "f" },
+            "ecart": "e", "adaptable": 2, "idee": "i"
+        })).unwrap();
+        let noms = |s: &[Segment]| s.iter().map(|s| (s.nom, s.part)).collect::<Vec<_>>();
+        assert_eq!(noms(&anatomie(&a)), [("Hook", None), ("Confirmation", None), ("Valeur", None), ("Fin", None)]);
+        a.parts = Some(noyau::modeles_veille::Parts { hook: 10, confirmation: 0, valeur: 60, placement: 0, fin: 10 });
+        assert_eq!(noms(&anatomie(&a)), [("Hook", Some(13)), ("Valeur", Some(75)), ("Fin", Some(13))]);
     }
 }

@@ -1,10 +1,11 @@
 // Veille : les vidéos qui montent sur les mots-clés suivis. La page ne défile pas, ses colonnes défilent.
-// Tout se lit par la commande `veille` (src/ecrans/veille.rs) ; ce module n'affiche que ce qu'elle rend. Le lecteur
-// demande le fichier de la vidéo à `lire_video`, qui le télécharge dans le cache au premier clic. « Demander à Claude »
-// lance `demander_veille` ; la dernière demande a sa pilule au bout des mots-clés, qui ouvre ses vidéos retenues.
+// Tout se lit par la commande `veille` (src/ecrans/veille.rs) ; ce module n'affiche que ce qu'elle rend. Le survol
+// d'une vidéo montre sa carte, le clic ouvre sa fiche (veille/fiche.js). « Demander à Claude » lance `demander_veille` ;
+// la dernière demande a sa pilule au bout des mots-clés, qui ouvre ses vidéos retenues.
 
-import { bloc, enTetePanneau, h, icone, logoPlateforme, miniature, pastille, pilule, rangee, rendu, segmente, surtitre, vide } from "../composants.js";
+import { enTetePanneau, h, icone, pilule, rendu, segmente, surtitre, vide } from "../composants.js";
 import { bouton, caseVideo, choixBusiness, menuContextuel, popover, remplacer } from "./videos/commun.js";
+import { fermerCarte, ouvrirFiche, survolCarte } from "./veille/fiche.js";
 
 const TRIS = [
   { id: "ratio", libelle: "× médiane" },
@@ -14,7 +15,7 @@ const TRIS = [
 ];
 const SEUIL = 20000;
 
-const INITIAL = { tri: "ratio", plateforme: null, outliers: true, mot: null, choisie: null, vue: "grille" };
+const INITIAL = { tri: "ratio", plateforme: null, outliers: true, mot: null, vue: "grille" };
 const etat = { ...INITIAL };
 let dernier = null;
 
@@ -94,7 +95,7 @@ function piluleDemande(dm) {
     {
       class: "pilule-mot demande" + (ouverte ? " choisie" : "") + (dm.etat === "en_cours" ? " tourne" : ""),
       title: dm.prompt,
-      onclick: () => maj(ouverte ? { vue: "grille" } : { vue: "demande", choisie: dm.retenues[0]?.case.id ?? etat.choisie }),
+      onclick: () => maj({ vue: ouverte ? "grille" : "demande" }),
     },
     icone(dm.etat === "en_cours" ? "relancer" : "loupe"),
     h("span", { class: "libelle" }, dm.prompt),
@@ -155,45 +156,17 @@ function panneauDemande(d, ctx) {
         : h(
             "div",
             { class: "grille-videos" },
-            dm.retenues.map(({ case: v, raison }) => caseGrille(v, d, ctx, { legende: raison, lignes: 3 })),
+            dm.retenues.map(({ case: v, raison }) => caseGrille(v, ctx, { legende: raison, lignes: 3 })),
           ),
       dm.journal.length > 0 && h("div", { class: "journal-demande" }, surtitre("Journal"), dm.journal.map((l) => h("div", { class: "ligne" }, l))),
     ),
   );
 }
 
-// lecteur
-
-/** La vidéo par-dessus l'écran ; Échap ou un clic sur le voile la ferme. */
-async function lire(v, ctx) {
-  const cadre = h("div", { class: "cadre" }, h("span", { class: "passage tourne" }, icone("relancer"), "Téléchargement"));
-  const voile = h("div", { class: "voile lecteur", onmousedown: (e) => e.target === voile && fermer() }, cadre);
-  const echap = (e) => {
-    if (e.key !== "Escape") return;
-    e.stopPropagation();
-    fermer();
-  };
-  function fermer() {
-    voile.remove();
-    document.removeEventListener("keydown", echap, true);
-  }
-  document.addEventListener("keydown", echap, true);
-  document.body.append(voile);
-  let chemin;
-  try {
-    chemin = await ctx.appeler("lire_video", { id: v.id });
-  } catch {
-    // l'erreur est déjà en toast
-    fermer();
-    return;
-  }
-  if (voile.isConnected) cadre.replaceChildren(h("video", { src: ctx.fichier(chemin), controls: true, autoplay: true }));
-}
-
 // vidéos
 
-/** Une vidéo de la grille ou des retenues : un clic la choisit, un double-clic la lit. */
-function caseGrille(v, d, ctx, { legende, lignes }) {
+/** Une vidéo de la grille ou des retenues : le survol montre sa carte, un clic ouvre sa fiche. */
+function caseGrille(v, ctx, { legende, lignes }) {
   const el = caseVideo({
     cles: v.cles,
     plateforme: v.plateforme,
@@ -202,15 +175,10 @@ function caseGrille(v, d, ctx, { legende, lignes }) {
     badgeCouleur: v.outlier ? "var(--succes)" : "var(--texte)",
     legende,
     lignes,
-    choisie: v.id === d.choisie,
-    stats: v.stats,
-    clic: () => maj({ choisie: v.id }),
+    clic: () => ouvrirFiche(v.id, ctx),
   });
-  el.addEventListener("dblclick", () => lire(v, ctx));
-  return menuContextuel(el, [
-    { libelle: "Lire ici", faire: () => lire(v, ctx) },
-    { libelle: `Ouvrir sur ${v.nomPlateforme}`, faire: () => ctx.lien(v.url) },
-  ]);
+  survolCarte(el.querySelector(".affiche"), v, ctx);
+  return menuContextuel(el, [{ libelle: `Ouvrir sur ${v.nomPlateforme}`, faire: () => ctx.lien(v.url) }]);
 }
 
 function panneauVeille(d, ctx) {
@@ -240,53 +208,9 @@ function panneauVeille(d, ctx) {
           h(
             "div",
             { class: "grille-videos" },
-            d.videos.map((v) => caseGrille(v, d, ctx, { legende: v.legende, lignes: 1 })),
+            d.videos.map((v) => caseGrille(v, ctx, { legende: v.legende, lignes: 1 })),
           ),
         ),
-  );
-}
-
-// détail
-
-function detail(d, ctx) {
-  const v = d.detail;
-  if (!v) return bloc(enTetePanneau("Détail"), vide(d.sansMot ? "Ajouter un mot-clé avec la carte +." : "Aucune vidéo pour ce filtre."));
-  return bloc(
-    enTetePanneau("Détail", h("button", { class: "voir-sur", onclick: () => ctx.lien(v.url) }, `Voir sur ${v.nomPlateforme} ↗`)),
-    h(
-      "div",
-      { class: "defile detail-veille", "data-defile": "detail" },
-      h(
-        "div",
-        { class: "entete-veille" },
-        h(
-          "button",
-          { class: "apercu-lecture survolable", title: "Lire ici", onclick: () => lire(v, ctx) },
-          miniature(v.cles, { plateforme: v.plateforme, largeur: "var(--t-apercu-l)", hauteur: "var(--t-apercu-h)", rayon: "var(--r-avatar)" }),
-          h("span", { class: "lecture" }, "▶"),
-        ),
-        h(
-          "div",
-          { class: "infos" },
-          h("div", { class: "compte" }, logoPlateforme(v.plateforme), v.compte),
-          h("div", { class: "note" }, v.meta),
-          v.legende && h("div", { class: "note legende-veille" }, v.legende),
-        ),
-      ),
-      h(
-        "div",
-        { class: "mesures" },
-        v.mesures.map((m) => [h("span", { class: "nom" }, m.nom), h("span", { class: "valeur" + (m.succes ? " succes" : "") }, m.valeur ?? "…")]),
-      ),
-      v.analyse
-        ? h(
-            "div",
-            { class: "analyse" },
-            h("div", { class: "pastilles" }, v.analyse.pastilles.map((p) => pastille(p.texte, { couleur: p.couleur && `var(--${p.couleur})` }))),
-            v.analyse.sections.map((s) => h("div", { class: "section-analyse" }, surtitre(s.titre), h("div", { class: s.fort ? "texte fort" : "texte" }, s.texte))),
-          )
-        : h("div", { class: "attente" }, v.attente),
-    ),
   );
 }
 
@@ -325,14 +249,14 @@ const ecran = {
   async rendre(racine, ctx) {
     if (!ctx.rafraichi) Object.assign(etat, INITIAL);
     dernier = { racine, ctx };
-    const d = await ctx.appeler("veille", { business: ctx.business, tri: etat.tri, plateforme: etat.plateforme, outliers: etat.outliers, mot: etat.mot, choisie: etat.choisie });
+    fermerCarte();
+    const d = await ctx.appeler("veille", { business: ctx.business, tri: etat.tri, plateforme: etat.plateforme, outliers: etat.outliers, mot: etat.mot });
     ctx.page.sousTitre(d.sousTitre);
     ctx.page.outils(...outils(d, ctx));
     if (!d.demande) etat.vue = "grille";
-    const gauche = etat.vue === "demande" ? panneauDemande(d, ctx) : panneauVeille(d, ctx);
-    const colonnes = rangee([2, 1], [gauche, detail(d, ctx)]);
-    colonnes.classList.add("remplit");
-    remplacer(racine, rangeeMots(d, ctx), colonnes);
+    const panneau = etat.vue === "demande" ? panneauDemande(d, ctx) : panneauVeille(d, ctx);
+    panneau.classList.add("remplit");
+    remplacer(racine, rangeeMots(d, ctx), panneau);
   },
 };
 

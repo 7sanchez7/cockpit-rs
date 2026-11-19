@@ -293,12 +293,14 @@ Ce qui est dit : {dit}
 Réponds en français, sauf `hook` et `texteEcran` recopiés mot pour mot dans leur langue.
 `blocs` découpe la vidéo en 5 blocs : hook (0-3 s), confirmation (ce qui confirme qu'on va avoir ce qu'on attend),
 valeur (le cœur), placement (la place laissée à un produit ou un appel), fin (ce qui fait revoir ou commenter) ;
-une phrase par bloc, « absent » s'il manque.
+une phrase par bloc, « absent » s'il manque ; `parts` donne la part de la durée de chaque bloc en %, total 100, 0 s'il manque.
 `ecart` : ce qui distingue cette vidéo d'une vidéo ordinaire du même compte, d'après ce que tu vois.
 `adaptable` : 0 = intransposable, 3 = refaisable telle quelle dans notre niche.
 `idee` : la vidéo à tourner pour nous, en une phrase concrète.",
         v.compte, v.plateforme.nom(), v.mot.as_deref().unwrap_or(""), v.legende.as_deref().unwrap_or("aucune"))
 }
+
+const BLOCS: [&str; 5] = ["hook", "confirmation", "valeur", "placement", "fin"];
 
 pub fn schema(formats: &[String]) -> Value {
     fn texte(d: &str) -> Value { json!({"type": "string", "description": d}) }
@@ -319,7 +321,8 @@ pub fn schema(formats: &[String]) -> Value {
         ("texteEcran", texte("Le texte incrusté pendant les 3 premières secondes, vide s'il n'y en a pas")),
         ("probleme", texte("Le problème ou le désir du spectateur que la vidéo touche")),
         ("format", format),
-        ("blocs", objet(["hook", "confirmation", "valeur", "placement", "fin"].map(|b| (b, texte(b))).to_vec())),
+        ("blocs", objet(BLOCS.map(|b| (b, texte(b))).to_vec())),
+        ("parts", objet(BLOCS.map(|b| (b, json!({"type": "integer", "description": "0 à 100"}))).to_vec())),
         ("ecart", texte("Ce qui change par rapport aux vidéos habituelles du compte")),
         ("adaptable", json!({"type": "integer", "description": "0 à 3"})),
         ("idee", texte("La vidéo à tourner pour nous")),
@@ -346,7 +349,7 @@ pub fn formats_index(index: &str) -> Vec<String> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::modeles_veille::Blocs;
+    use crate::modeles_veille::{Blocs, Parts};
 
     pub fn analyse() -> AnalyseVeille {
         AnalyseVeille {
@@ -354,6 +357,7 @@ pub mod tests {
             hook_visuel: "visage face caméra".into(), texte_ecran: "".into(), probleme: "Parler sans faire de fautes".into(),
             format: "4-erreurs".into(),
             blocs: Blocs { hook: "a".into(), confirmation: "b".into(), valeur: "c".into(), placement: "absent".into(), fin: "d".into() },
+            parts: Some(Parts { hook: 10, confirmation: 15, valeur: 60, placement: 0, fin: 15 }),
             ecart: "Plus court".into(), adaptable: 3, idee: "Les 3 erreurs de ser et estar".into(),
         }
     }
@@ -399,6 +403,7 @@ pub mod tests {
         let blocs = &s["properties"]["blocs"];
         assert_eq!(blocs["additionalProperties"], false);
         assert_eq!(blocs["required"].as_array().unwrap().len(), 5);
+        assert_eq!(s["properties"]["parts"]["required"].as_array().unwrap().len(), 5);
         assert_eq!(s["properties"]["format"]["enum"], json!(["4-erreurs", "nouveau"]));
     }
 
