@@ -10,7 +10,7 @@ Les vidéos qui ont marché sur des mots-clés, sur TikTok et Instagram, sans su
 
 ## Les fournisseurs
 
-`crates/noyau/src/collecte/lurkapi.rs` (principal) et `tikhub.rs` (repli), réunis par `fournisseurs.rs`. Une clé se lit comme les autres secrets (`ctx.secrets.valeur("LURKAPI_API_KEY", business)`) : variable d'environnement du même nom, trousseau du système (Réglages, onglet Clés), ou Secret Manager du business. LurkAPI se crée sur `lurkapi.com`, TikHub sur `user.tikhub.io/dashboard/api`.
+`crates/noyau/src/collecte/lurkapi.rs` (principal) et `tikhub.rs` (repli), réunis par `fournisseurs.rs`. La clé LurkAPI se saisit dans Réglages, onglet Clés, ligne « Clé du scrappeur » : elle est rangée dans la base (réglage `veille.cle_scrappeur`) et passe avant tout le reste. À défaut, chaque clé se lit comme les autres secrets (`ctx.secrets.valeur("LURKAPI_API_KEY", business)`) : variable d'environnement du même nom, trousseau du système, ou Secret Manager du business. LurkAPI se crée sur `lurkapi.com`, TikHub sur `user.tikhub.io/dashboard/api`.
 
 Quand une clé existe, `Fournisseurs::chercher` et `Fournisseurs::dernieres` remplacent, pour la veille et pour la demande à Claude, la page cachée de TikTok, DuckDuckGo et les embeds d'Instagram, et yt-dlp pour la médiane des comptes. Aucun Cookie, aucun accès complet au disque, aucun navigateur : ça marche aussi dans l'app sans session et dans `cargo run -p noyau --example essai -- Veille`.
 

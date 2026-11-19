@@ -61,6 +61,8 @@ pub fn commandes() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
         reglages::reglages_cles,
         reglages::ranger_cle,
         reglages::effacer_cle,
+        reglages::ranger_cle_scrappeur,
+        reglages::effacer_cle_scrappeur,
         reglages::reglages_notifs,
         reglages::reglages_collecte,
         reglages::montrer_base,

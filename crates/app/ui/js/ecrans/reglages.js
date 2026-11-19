@@ -181,8 +181,37 @@ async function cles(ctx) {
     saisies.delete(nom);
     agir("ranger_cle", { nom, valeur });
   };
+  const scrappeur = async (cmd, args) => {
+    try {
+      await ctx.appeler(cmd, args);
+      vue.message = null;
+    } catch (e) {
+      vue.message = { texte: e.message, erreur: true };
+    }
+    afficher(ctx);
+  };
+  const rangerScrappeur = () => {
+    const valeur = (saisies.get("__scrappeur") ?? "").trim();
+    if (!valeur) return;
+    saisies.delete("__scrappeur");
+    scrappeur("ranger_cle_scrappeur", { valeur });
+  };
   return [
     brouillons.length > 0 && groupe(null, [ligne("Business", choixBusiness(ctx, brouillons))]),
+    d &&
+      groupe(
+        "Scrappeur de la veille",
+        [
+          d.scrappeur
+            ? ligne("Clé du scrappeur", h("span", { class: "valeur ok" }, "dans la base"), bouton("Effacer", () => scrappeur("effacer_cle_scrappeur", {})))
+            : ligne(
+                "Clé du scrappeur",
+                champ(saisies.get("__scrappeur") ?? "", (v) => saisies.set("__scrappeur", v), { aide: "LurkAPI, rangée dans la base", secret: true, valider: rangerScrappeur }),
+                bouton("Ranger", rangerScrappeur),
+              ),
+        ],
+        "Recherche TikTok et Instagram de la veille, sans session.",
+      ),
     d &&
       groupe(
         d.coffre,

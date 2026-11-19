@@ -149,6 +149,7 @@ const COFFRE: &str = if cfg!(target_os = "macos") { "Trousseau" } else if cfg!(w
 pub struct Cles {
     coffre: &'static str,
     cles: Vec<Cle>,
+    scrappeur: bool,
     pied: String,
     fichiers: Vec<Fichier>,
 }
@@ -176,9 +177,11 @@ pub async fn reglages_cles(etat: State<'_, Etat>, business: String) -> Rep<Cles>
     let projet = b.config.firebase_project.as_ref().map(|p| format!(" du projet {p}")).unwrap_or_default();
     let asc = app_store_connect::dossier_cles().and_then(|d| app_store_connect::cle(&d)).is_ok();
     let adc = noyau::chemins::adc().exists();
+    let cle = etat.store.reglage(lurkapi::REGLAGE).map_err(texte)?.filter(|v| !v.trim().is_empty());
     Ok(Cles {
         coffre: COFFRE,
         cles,
+        scrappeur: cle.is_some(),
         pied: format!("Sans clé dans le {COFFRE}, le cockpit lit la variable d'environnement du même nom, puis Secret Manager{projet}."),
         fichiers: vec![
             Fichier {
@@ -214,6 +217,25 @@ pub async fn ranger_cle(etat: State<'_, Etat>, business: String, nom: String, va
 pub async fn effacer_cle(etat: State<'_, Etat>, business: String, nom: String) -> Rep<()> {
     let b = self::business(&etat, &business)?;
     etat.collecteur.secrets.effacer(nom_cle(&nom)?, &b).map_err(texte)
+}
+
+/// La clé du scrappeur de la veille, rangée dans la base (elle passe avant le trousseau).
+#[tauri::command]
+pub async fn ranger_cle_scrappeur(etat: State<'_, Etat>, valeur: String) -> Rep<()> {
+    let valeur = valeur.trim();
+    if valeur.is_empty() {
+        return Ok(());
+    }
+    etat.store.regler(lurkapi::REGLAGE, Some(valeur)).map_err(texte)?;
+    etat.store.a_change();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn effacer_cle_scrappeur(etat: State<'_, Etat>) -> Rep<()> {
+    etat.store.regler(lurkapi::REGLAGE, None).map_err(texte)?;
+    etat.store.a_change();
+    Ok(())
 }
 
 #[derive(Serialize)]

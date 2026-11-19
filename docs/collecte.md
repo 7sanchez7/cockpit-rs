@@ -151,7 +151,7 @@ Le jeton Google (`GCloud`, `crates/noyau/src/collecte/gcloud.rs`) ouvre Secret M
 | clé `.p8` App Store Connect | App Store Connect | `.appstoreconnect/private_keys/AuthKey_<KEYID>.p8` du dossier personnel, voir sa fiche |
 | clé JSON du compte de service Play | Play Console | `.googleplay/<business>-play-publisher.json` du dossier personnel, voir sa fiche |
 | cookies `tiktok.com`, `instagram.com`, `facebook.com` | TikTok, Instagram, Facebook | § Sessions |
-| `LURKAPI_API_KEY` | Veille (TikTok et Instagram, sans session), fournisseur principal | trousseau ou Secret Manager, voir [`sources/veille.md`](sources/veille.md) § Les fournisseurs |
+| `LURKAPI_API_KEY` | Veille (TikTok et Instagram, sans session), fournisseur principal | réglage `veille.cle_scrappeur` (Réglages, onglet Clés), sinon trousseau ou Secret Manager, voir [`sources/veille.md`](sources/veille.md) § Les fournisseurs |
 | `TIKHUB_API_KEY` | Veille (TikTok et Instagram, sans session), repli | trousseau ou Secret Manager, voir [`sources/veille.md`](sources/veille.md) § Les fournisseurs |
 | aucun | Contenu, YouTube | |
 

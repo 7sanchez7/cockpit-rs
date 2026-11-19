@@ -8,10 +8,18 @@ use serde_json::Value;
 
 /// Le nom du secret de la clé LurkAPI : variable d'environnement du même nom, trousseau du système, ou Secret Manager.
 pub const CLE: &str = "LURKAPI_API_KEY";
+/// Le réglage (dans la base) où Réglages range la clé saisie à la main ; il passe avant le trousseau.
+pub const REGLAGE: &str = "veille.cle_scrappeur";
 const BASE: &str = "https://api.lurkapi.com";
 
-/// La clé LurkAPI, lue sur le premier business qui l'a.
+/// La clé LurkAPI : le réglage saisi dans Réglages d'abord, puis l'environnement, le trousseau ou Secret Manager.
 pub async fn cle(ctx: &Contexte) -> Option<String> {
+    if let Ok(Some(v)) = ctx.store.reglage(REGLAGE) {
+        let v = v.trim();
+        if !v.is_empty() {
+            return Some(v.to_string());
+        }
+    }
     for b in &ctx.businesses {
         if let Ok(v) = ctx.secrets.valeur(CLE, b).await {
             return Some(v);
