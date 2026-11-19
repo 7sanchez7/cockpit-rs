@@ -2,8 +2,6 @@
 
 Tout se lance depuis la racine du dépôt.
 
-Les écrans ne sont pas encore codés (`crates/app/ui/js/ecrans/*.js` affichent « À venir. ») : ce que ce runbook attribue à Santé, Réglages ou Vidéos vaut pour la suite. D'ici là, l'état des sources se lit par `cockpit etat` ou dans la table `collecte`.
-
 ## Prérequis
 
 - [Rust](https://rustup.rs) stable. Le dépôt ne fixe pas de version minimale (`rust-version` absent des `Cargo.toml`, édition 2021).
@@ -13,7 +11,7 @@ Les écrans ne sont pas encore codés (`crates/app/ui/js/ecrans/*.js` affichent 
 - Pour un business avec `firebaseProject` seulement, identifiants Google par défaut pour Secret Manager et Firestore : `gcloud auth application-default login` (une fois ; crée `application_default_credentials.json` dans `~/.config/gcloud/` sur Mac, `%APPDATA%\gcloud\` sous Windows). Le cockpit lit ce fichier et rafraîchit le jeton en HTTP ; la CLI gcloud ne sert qu'en repli (`gcloud auth print-access-token`). `GOOGLE_APPLICATION_CREDENTIALS` remplace le fichier.
 - La clé App Store Connect `AuthKey_<KEYID>.p8` dans `.appstoreconnect/private_keys/` du dossier personnel (`~` sur Mac, `C:\Users\<nom>` sous Windows), et l'issuer dans le champ `ascIssuer` du business (Réglages, onglet Business, ou la graine).
 - `yt-dlp` pour TikTok et YouTube, `ffmpeg` pour la première image des vidéos YouTube et Facebook. Mac : `brew install yt-dlp ffmpeg`. Windows : `winget install yt-dlp.yt-dlp Gyan.FFmpeg` (ou scoop). L'app les cherche dans le PATH puis dans les dossiers de Homebrew, winget, scoop et pip, même lancée depuis le Finder ou le menu Démarrer (`noyau::collecte::commande`).
-- **La Veille** ([`sources/veille.md`](sources/veille.md)) ne tourne que dans l'app (le navigateur caché n'existe pas dans la CLI ni dans l'essai) et demande en plus : les sessions TikTok et Instagram ; `yt-dlp` ; `ffmpeg` et `ffprobe` pour les images des analyses ; la clé `ANTHROPIC_API_KEY` (nom réglable par le champ `claude` de la graine), sans laquelle les vidéos sont relevées mais pas analysées ; `transcrire` dans le PATH, facultatif (sans lui, l'analyse se fait sur les images seules). Les mots-clés s'ajoutent par `cockpit veille mot ajoute` ([`cli.md`](cli.md)).
+- **La Veille** ([`sources/veille.md`](sources/veille.md)) ne tourne que dans l'app (le navigateur caché n'existe pas dans la CLI ni dans l'essai) et demande en plus : les sessions TikTok et Instagram ; `yt-dlp` ; `ffmpeg` et `ffprobe` pour les images des analyses ; la clé `ANTHROPIC_API_KEY` (nom réglable par le champ `claude` de la graine), sans laquelle les vidéos sont relevées mais pas analysées ; `transcrire` dans le PATH, facultatif (sans lui, l'analyse se fait sur les images seules). Les mots-clés s'ajoutent dans l'écran Veille ou par `cockpit veille mot ajoute` ([`cli.md`](cli.md)).
 - **Les sessions** de tiktok.com, instagram.com et facebook.com, pour les stats privées TikTok, Instagram et Facebook :
   - Mac : une session ouverte dans Safari, et l'accès complet au disque pour Cockpit (Réglages Système, Confidentialité et sécurité, Accès complet au disque, ajouter `Cockpit.app`, puis la relancer). Sans Safari, la fenêtre Sessions de l'app sert de repli.
   - Windows : la commande Tauri `session` (`crates/app/src/commandes.rs`, sites `tiktok`, `instagram`, `facebook`) ouvre la page de connexion du site dans une fenêtre de l'app : Réglages, onglet Sessions, « Se connecter ». La session reste dans le magasin de cookies de l'app (WebView2), partagé avec le navigateur caché de la Veille.
