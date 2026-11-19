@@ -33,7 +33,7 @@ cargo run -p cockpit-cli -- etat   # la CLI des agents
 Il faut [Rust](https://rustup.rs) et, pour fabriquer l'installeur, la CLI Tauri (`cargo install tauri-cli --version "^2"`). Sous Windows, les outils de compilation C++ de Visual Studio (« Build Tools », charge « Développement Desktop en C++ ») ; WebView2 est déjà dans Windows 10 et 11. Sur Mac, les Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone <url de ce dépôt> cockpit-rs && cd cockpit-rs
+git clone https://github.com/7sanchez7/cockpit-rs cockpit-rs && cd cockpit-rs
 cd crates/app && cargo tauri build
 ```
 
