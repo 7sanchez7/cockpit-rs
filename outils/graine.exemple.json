@@ -1,0 +1,33 @@
+{
+  "businesses": [
+    {
+      "id": "monapp",
+      "nom": "Mon App",
+      "lettre": "M",
+      "teinte": "ciel",
+      "config": {
+        "appStoreId": "1234567890",
+        "ascIssuer": "00000000-0000-0000-0000-000000000000",
+        "ascVendor": "80000000",
+        "playPackage": "com.exemple.monapp",
+        "posthogHost": "https://eu.posthog.com",
+        "pays": ["fr", "us"],
+        "genre": 6017,
+        "objectifMensuelEUR": 5000,
+        "evenements": {
+          "installation": "onboarding_started",
+          "etape": "onboarding_step_completed",
+          "paywall": "paywall_viewed",
+          "essai": "trial_started",
+          "achat": "purchase_completed",
+          "usage": "lesson_completed"
+        }
+      }
+    }
+  ],
+  "comptes": [
+    {"business": "monapp", "plateforme": "tiktok", "handle": "monapp"},
+    {"business": "monapp", "plateforme": "instagram", "handle": "monapp"},
+    {"business": "monapp", "plateforme": "youtube", "handle": "monapp"}
+  ]
+}
