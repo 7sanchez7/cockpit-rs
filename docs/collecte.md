@@ -34,7 +34,9 @@ Aides partagées, dans `crates/noyau/src/collecte/` :
 - `http.rs` : `Http` et `Requete` (ci-dessous), `UA_NAVIGATEUR` (Chrome sur Mac), `UA_SAFARI` et `UA_SESSION` (le navigateur de la session : Safari sur Mac, Edge WebView2 sous Windows), `entete_cookie` (l'en-tête `Cookie` d'une session, clés triées), `encoder` (une valeur d'URL), `extrait` (le début d'une réponse pour un message d'erreur).
 - `safari.rs` : les cookies d'un domaine dans Safari (§ Sessions), et `se_connecter`, la fin des messages de session expirée : « se reconnecter sur `<site>` dans Safari » sur Mac, « se reconnecter à `<site>` dans Réglages, Sessions » ailleurs (`safari::se_connecter`).
 - `ytdlp.rs` : la liste (`liste`, `yt-dlp --flat-playlist -J`) et le détail (`details`, `yt-dlp -j --skip-download`) des vidéos publiques d'un compte TikTok ou YouTube, et `tenir_a_jour`, qui garde un yt-dlp nightly dans `chemins::outils()` (§ Programmes locaux).
-- `tikhub.rs` : la recherche et les profils TikTok et Instagram par l'API TikHub, sans session ni navigateur (`cle`, `chercher`, `dernieres`) : le chemin de la Veille quand la clé `TIKHUB_API_KEY` existe ([`sources/veille.md`](sources/veille.md) § TikHub).
+- `lurkapi.rs` : la recherche et les profils TikTok et Instagram par l'API LurkAPI, sans session ni navigateur (`cle`, `chercher`, `dernieres`) : le chemin principal de la Veille ([`sources/veille.md`](sources/veille.md) § Les fournisseurs).
+- `fournisseurs.rs` : `Fournisseurs`, les clés LurkAPI et TikHub résolues une fois par passage, LurkAPI d'abord et TikHub en repli (`configure`, `chercher`, `dernieres`).
+- `tikhub.rs` : la recherche et les profils TikTok et Instagram par l'API TikHub, sans session ni navigateur (`cle`, `chercher`, `dernieres`) : le repli de la Veille quand LurkAPI échoue ([`sources/veille.md`](sources/veille.md) § Les fournisseurs).
 - `miniatures.rs` : télécharge les images absentes du dossier `miniatures` du cache (§ Où sont les fichiers), un fichier par clé (`:` et `/` remplacés par `_`) : l'id de la vidéo pour sa miniature, `avatar:<compte>`, `icone:<id App Store>`, `premiere:<id de vidéo>` pour la première image du flux. `extraire_premieres` les tire toutes, 4 à la fois (`EXTRACTIONS_EN_PARALLELE`) : `yt-dlp -g` en 960 px de haut au plus, puis `ffmpeg -frames:v 1`, écrit dans un `.part` puis renommé. Seuls YouTube et Facebook en ont (`cles`), leur miniature n'étant pas la première image. L'interface lit ce dossier sans réseau ; le vider fait tout revenir au passage suivant.
 - `jwt.rs` : `es256` (App Store Connect) et `rs256` (Play Console).
 - `gcloud.rs` et `secrets.rs` : § Secrets.
@@ -149,7 +151,8 @@ Le jeton Google (`GCloud`, `crates/noyau/src/collecte/gcloud.rs`) ouvre Secret M
 | clé `.p8` App Store Connect | App Store Connect | `.appstoreconnect/private_keys/AuthKey_<KEYID>.p8` du dossier personnel, voir sa fiche |
 | clé JSON du compte de service Play | Play Console | `.googleplay/<business>-play-publisher.json` du dossier personnel, voir sa fiche |
 | cookies `tiktok.com`, `instagram.com`, `facebook.com` | TikTok, Instagram, Facebook | § Sessions |
-| `TIKHUB_API_KEY` | Veille (TikTok et Instagram, sans session) | trousseau ou Secret Manager, voir [`sources/veille.md`](sources/veille.md) § TikHub |
+| `LURKAPI_API_KEY` | Veille (TikTok et Instagram, sans session), fournisseur principal | trousseau ou Secret Manager, voir [`sources/veille.md`](sources/veille.md) § Les fournisseurs |
+| `TIKHUB_API_KEY` | Veille (TikTok et Instagram, sans session), repli | trousseau ou Secret Manager, voir [`sources/veille.md`](sources/veille.md) § Les fournisseurs |
 | aucun | Contenu, YouTube | |
 
 ## Business

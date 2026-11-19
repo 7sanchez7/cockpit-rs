@@ -124,9 +124,11 @@ pub fn instagram(d: &Map<String, Value>) -> Option<Trouvaille> {
     }
     let user = d.get("user").and_then(Value::as_object).or_else(|| d.get("owner").and_then(Value::as_object))?;
     let handle = user.get("username")?.as_str()?;
-    let legende = d.get("caption").and_then(|c| c.get("text")).and_then(Value::as_str).or_else(|| {
-        d.get("edge_media_to_caption")?.get("edges")?.as_array()?.first()?.get("node")?.get("text")?.as_str()
-    });
+    let legende = d.get("caption").and_then(|c| c.get("text")).and_then(Value::as_str)
+        .or_else(|| d.get("caption").and_then(Value::as_str))
+        .or_else(|| {
+            d.get("edge_media_to_caption")?.get("edges")?.as_array()?.first()?.get("node")?.get("text")?.as_str()
+        });
     let image = d.get("image_versions2").and_then(|i| i.get("candidates")?.as_array()?.first()?.get("url")?.as_str())
         .or_else(|| d.get("display_url").and_then(Value::as_str));
     let media = d.get("video_versions").and_then(|v| v.as_array()?.first()?.get("url")?.as_str())

@@ -4,7 +4,7 @@ use crate::commandes::{texte, Rep, SITES};
 use crate::Etat;
 use noyau::business::{Business, Config};
 use noyau::collecte::collecteur::REGLAGE_PAUSE;
-use noyau::collecte::tikhub;
+use noyau::collecte::{lurkapi, tikhub};
 use noyau::lecture::format;
 use noyau::lecture::recherche::plier;
 use noyau::modeles::TypeFil;
@@ -133,11 +133,12 @@ pub async fn supprimer_business(etat: State<'_, Etat>, id: String) -> Rep<()> {
 }
 
 /// Les clés rangées par business dans le trousseau, avec leur libellé.
-const CLES: [(&str, &str); 4] = [
+const CLES: [(&str, &str); 5] = [
+    (lurkapi::CLE, "LurkAPI, clé API (veille, recommandé)"),
+    (tikhub::CLE, "TikHub, clé API (veille, repli)"),
     (posthog::CLE_PROJET, "PostHog, id du projet"),
     (posthog::CLE_API, "PostHog, clé personnelle scopée au projet"),
     (revenuecat::NOM_CLE, "RevenueCat, clé secrète v2 en lecture"),
-    (tikhub::CLE, "TikHub, clé API (veille TikTok et Instagram)"),
 ];
 
 /// Le nom du trousseau du système, tel que l'onglet Clés l'écrit.
