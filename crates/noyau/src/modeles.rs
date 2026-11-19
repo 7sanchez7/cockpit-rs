@@ -227,6 +227,7 @@ impl Analyse {
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Appli {
     pub id: String,
     pub nom: String,
@@ -251,7 +252,8 @@ impl Liste {
     pub fn depuis(s: &str) -> Option<Liste> { Self::TOUTES.into_iter().find(|l| l.brut() == s) }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Avis {
     pub id: String,
     pub business: String,
