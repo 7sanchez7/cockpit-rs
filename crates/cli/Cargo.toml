@@ -10,6 +10,6 @@ path = "src/main.rs"
 
 [dependencies]
 noyau.workspace = true
-tokio.workspace = true
-serde_json.workspace = true
+
+[dev-dependencies]
 chrono.workspace = true
