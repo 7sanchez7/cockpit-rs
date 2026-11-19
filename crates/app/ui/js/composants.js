@@ -22,6 +22,7 @@
 //   legende([{ nom, couleur }])
 //   avatar(business | null, { mini }), miniature(cles, { plateforme, largeur, hauteur, rayon })
 //   ligneFil(evenement, { jour }), caseRonde({ faite, alerte, quandClic })
+//   boutonRelancer(enCours, quandClic)   relance une source (Santé, SAV)
 
 import * as F from "./format.js";
 import { image, lien } from "./pont.js";
@@ -527,5 +528,17 @@ export function caseRonde({ faite = false, alerte = false, quandClic }) {
     "button",
     { class: ["case", faite && "faite", !faite && alerte && "alerte"].filter(Boolean).join(" "), title: faite ? "Remettre à faire" : "Marquer comme fait", onclick: quandClic },
     faite && "✓",
+  );
+}
+
+// Santé, SAV
+
+/** Relance une source ; tourne et se grise tant qu'elle est en cours. */
+export function boutonRelancer(enCours, quandClic) {
+  return h(
+    "button",
+    { class: enCours ? "relancer-source tourne" : "relancer-source", disabled: enCours, onclick: quandClic },
+    icone("relancer"),
+    enCours ? "En cours" : "Relancer",
   );
 }
