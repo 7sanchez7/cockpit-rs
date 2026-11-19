@@ -322,7 +322,7 @@ Une demande à Claude depuis l'écran Veille ([`sources/veille.md`](sources/veil
 | `id` | UUID en majuscules |
 | `business`, `prompt` | le business choisi et la consigne, 2 000 caractères au plus |
 | `debut`, `fin` | ISO UTC ; `fin` nulle tant qu'elle tourne |
-| `etat` | `en_cours`, `finie` ou `echouee` ; créer une demande passe celle restée `en_cours` en `echouee`, erreur « interrompue » (`nouvelle_demande`) |
+| `etat` | `en_cours`, `finie` ou `echouee` ; créer une demande passe celle restée `en_cours` en `echouee`, erreur `DemandeVeille::INTERROMPUE` (`nouvelle_demande`) |
 | `journal` | tableau JSON de lignes, une par étape (`noter_demande`) |
 | `synthese`, `erreur` | la synthèse de Haiku, ou ce qui l'a arrêtée (`finir_demande`) |
 | `fil` | l'id de la première demande de sa conversation ; nul pour les demandes d'avant les conversations, lues comme `coalesce(fil, id)` |

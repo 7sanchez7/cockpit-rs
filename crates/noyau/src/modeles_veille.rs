@@ -88,6 +88,8 @@ impl DemandeVeille {
     pub const EN_COURS: &'static str = "en_cours";
     pub const FINIE: &'static str = "finie";
     pub const ECHOUEE: &'static str = "echouee";
+    /// L'erreur d'une demande que l'app, quittée en route, n'a pas finie.
+    pub const INTERROMPUE: &'static str = "Interrompue : Cockpit a été quitté pendant la recherche. Les vidéos déjà trouvées sont dans la bank.";
 
     pub fn depuis_ligne(l: &Ligne) -> Option<DemandeVeille> {
         Some(DemandeVeille {

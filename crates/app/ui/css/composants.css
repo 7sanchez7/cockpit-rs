@@ -1187,22 +1187,23 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 }
 .avatar-claude .icone { width: 60%; height: 60%; }
 .avatar-claude.grand { width: var(--t-avatar-claude-grand); height: var(--t-avatar-claude-grand); }
-.etapes { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-s); }
-.bascule-etapes { display: inline-flex; align-items: center; gap: var(--e-s); font: var(--f-mini-gras); color: var(--tertiaire); transition: color var(--duree-survol); }
-.bascule-etapes:hover { color: var(--secondaire); }
-.bascule-etapes .icone { width: var(--e-xl); height: var(--e-xl); transition: transform var(--duree-survol) var(--ressort-survol); }
-.bascule-etapes.ouvert .icone { transform: rotate(90deg); }
-.liste-etapes { display: flex; flex-direction: column; gap: var(--e-s); margin-left: var(--e-s); padding: var(--e-xs) 0 var(--e-xs) var(--e-l); border-left: var(--filet) solid var(--blanc-grille); }
-.etape { display: flex; align-items: flex-start; gap: var(--e-m); font: var(--f-mini); color: var(--secondaire); user-select: text; }
-.etape .icone { width: var(--e-xl); height: var(--e-xl); margin-top: var(--e-xs); color: var(--tertiaire); }
-.etape.retenue .icone { color: var(--succes); }
-.etape.echec .icone { color: var(--danger); }
-.etape.courante { font: var(--f-label); color: var(--texte); }
-.etape.courante .icone { color: var(--orange); }
+.deroule { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-s); }
+.bascule-deroule { display: inline-flex; align-items: center; gap: var(--e-s); font: var(--f-mini-gras); color: var(--tertiaire); transition: color var(--duree-survol); }
+.bascule-deroule:hover { color: var(--secondaire); }
+.bascule-deroule .icone { width: var(--e-xl); height: var(--e-xl); transition: transform var(--duree-survol) var(--ressort-survol); }
+.bascule-deroule.ouvert .icone { transform: rotate(90deg); }
+.liste-deroule { display: flex; flex-direction: column; gap: var(--e-s); margin-left: var(--e-s); padding: var(--e-xs) 0 var(--e-xs) var(--e-l); border-left: var(--filet) solid var(--blanc-grille); }
+.pas-deroule { display: flex; align-items: flex-start; gap: var(--e-m); font: var(--f-mini); color: var(--secondaire); user-select: text; }
+.pas-deroule .icone { width: var(--e-xl); height: var(--e-xl); margin-top: var(--e-xs); color: var(--tertiaire); }
+.pas-deroule.retenue .icone { color: var(--succes); }
+.pas-deroule.echec .icone { color: var(--danger); }
+.pas-deroule.courante { font: var(--f-label); color: var(--texte); }
+.pas-deroule.courante .icone { color: var(--orange); }
 .reponse .synthese { font: var(--f-corps); color: var(--texte); white-space: pre-line; user-select: text; }
 .retenues { display: flex; flex-direction: column; gap: var(--e-m); }
 .retenues .grille-videos { padding: 0; }
 .reponse .erreur { font: var(--f-petit); color: var(--danger); user-select: text; }
+.reponse .relance { align-self: flex-start; }
 .accueil-chat { flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--e-xl); max-width: var(--t-chat-accueil); padding: var(--e-page); text-align: center; }
 .accueil-chat .note { font: var(--f-petit); color: var(--secondaire); }
 .exemples { align-self: stretch; display: flex; flex-direction: column; gap: var(--e-m); margin-top: var(--e-l); }

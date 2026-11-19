@@ -411,7 +411,7 @@ function ouvrirFil(fil) {
 }
 
 function ligneEtape(e) {
-  return h("div", { class: "etape " + e.genre }, icone(ICONES_ETAPES[e.genre] ?? "info"), h("span", { class: "texte" }, e.texte));
+  return h("div", { class: "pas-deroule " + e.genre }, icone(ICONES_ETAPES[e.genre] ?? "info"), h("span", { class: "texte" }, e.texte));
 }
 
 /** Le journal d'une demande : l'étape en cours en clair, les autres repliées. */
@@ -422,12 +422,12 @@ function etapes(dm) {
   const ouvert = depliees.has(dm.id);
   const el = h(
     "div",
-    { class: "etapes" },
+    { class: "deroule" },
     passees.length > 0 &&
       h(
         "button",
         {
-          class: "bascule-etapes" + (ouvert ? " ouvert" : ""),
+          class: "bascule-deroule" + (ouvert ? " ouvert" : ""),
           onclick: () => {
             if (ouvert) depliees.delete(dm.id);
             else depliees.add(dm.id);
@@ -437,13 +437,14 @@ function etapes(dm) {
         icone("chevron"),
         `${passees.length} étape${passees.length > 1 ? "s" : ""}`,
       ),
-    ouvert && h("div", { class: "liste-etapes" }, passees.map(ligneEtape)),
-    courante && h("div", { class: "etape courante tourne" }, icone("relancer"), h("span", { class: "texte" }, courante)),
+    ouvert && h("div", { class: "liste-deroule" }, passees.map(ligneEtape)),
+    courante && h("div", { class: "pas-deroule courante tourne" }, icone("relancer"), h("span", { class: "texte" }, courante)),
   );
   return el;
 }
 
-function echange(dm, ctx, faites) {
+/** `relancable` : la dernière demande du fil, en échec, quand rien ne tourne. */
+function echange(dm, ctx, faites, relancable) {
   const n = dm.retenues.length;
   return h(
     "div",
@@ -464,6 +465,7 @@ function echange(dm, ctx, faites) {
         ),
       dm.etat === "finie" && n === 0 && !dm.synthese && h("div", { class: "attente" }, "Aucune vidéo retenue."),
       dm.erreur && h("div", { class: "erreur" }, dm.erreur),
+      relancable && h("div", { class: "relance" }, pilule("Relancer", () => relancer(dm.prompt), { icone: "relancer" })),
     ),
   );
 }
@@ -498,15 +500,25 @@ function accueilChat() {
 
 let chat = null;
 
-async function envoyer() {
+/** Lance une demande dans le fil ouvert, ou un nouveau fil ; rend le fil, `null` si rien n'est parti. */
+async function demander(prompt) {
   const { d, ctx } = chat ?? {};
-  const prompt = saisie.value.trim();
-  if (!d || !prompt || d.occupe) return;
+  if (!d || !prompt || d.occupe) return null;
   const business = d.business ?? businessNouveau ?? ctx.business ?? ctx.businesses[0]?.id;
-  const fil = await ctx.appeler("demander_veille", { business, prompt, fil: d.fil });
+  return ctx.appeler("demander_veille", { business, prompt, fil: d.fil });
+}
+
+async function envoyer() {
+  const fil = await demander(saisie.value.trim());
+  if (fil == null) return;
   saisie.value = "";
   ajuster();
   return ouvrirFil(fil);
+}
+
+async function relancer(prompt) {
+  const fil = await demander(prompt);
+  if (fil != null) return ouvrirFil(fil);
 }
 
 function barreSaisie(d, ctx) {
@@ -532,7 +544,7 @@ function barreSaisie(d, ctx) {
 }
 
 function vueClaude(d, ctx, faites) {
-  const fil = h("div", { class: "defile fil-chat", "data-defile": "chat" }, d.demandes.length === 0 ? accueilChat() : h("div", { class: "messages" }, d.demandes.map((dm) => echange(dm, ctx, faites))));
+  const fil = h("div", { class: "defile fil-chat", "data-defile": "chat" }, d.demandes.length === 0 ? accueilChat() : h("div", { class: "messages" }, d.demandes.map((dm, i) => echange(dm, ctx, faites, i === d.demandes.length - 1 && dm.etat === "echouee" && !d.occupe))));
   return h("div", { class: "veille-chat remplit" }, listeFils(d), h("section", { class: "panneau-chat verre" }, fil, barreSaisie(d, ctx)));
 }
 

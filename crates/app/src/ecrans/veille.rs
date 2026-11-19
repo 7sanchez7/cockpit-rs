@@ -339,7 +339,7 @@ fn demande_ecran(d: DemandeVeille, menee: bool, cout: f64, retenues: Vec<Retenue
     DemandeEcran {
         etat: etat_demande(&d.etat, menee),
         meta: format!("{}, {} $", format::majuscule(&format::il_ya(&d.debut, m)), format::decimal(cout, 2)),
-        erreur: if perdue { Some("interrompue".into()) } else { d.erreur },
+        erreur: if perdue { Some(DemandeVeille::INTERROMPUE.into()) } else { d.erreur },
         etapes: d.journal.iter().map(|x| etape(x)).collect(),
         id: d.id,
         prompt: d.prompt,

@@ -132,8 +132,8 @@ impl Store {
 
     /// Une demande qui commence ; celles restées en cours (app quittée en route) passent en échec.
     pub fn nouvelle_demande(&self, d: &DemandeVeille) -> Res<()> {
-        self.db.execute("update veille_demande set etat = ?, fin = ?, erreur = 'interrompue' where etat = ?",
-            p![DemandeVeille::ECHOUEE, d.debut, DemandeVeille::EN_COURS])?;
+        self.db.execute("update veille_demande set etat = ?, fin = ?, erreur = ? where etat = ?",
+            p![DemandeVeille::ECHOUEE, d.debut, DemandeVeille::INTERROMPUE, DemandeVeille::EN_COURS])?;
         self.db.execute("insert into veille_demande (id, business, prompt, debut, etat, fil) values (?, ?, ?, ?, ?, ?)",
             p![&d.id, &d.business, &d.prompt, d.debut, &d.etat, &d.fil])?;
         Ok(())

@@ -134,7 +134,7 @@ Une consigne libre tapée dans l'écran Veille (« Trouve des vidéos scriptées
 
 **Coût** : chaque appel s'écrit dans `veille_cout` sous `demande:<id>` (`facturer`), au prix de son modèle et de chaque sorte de token (`Prix`, `Usage::usd`) : Sonnet 2 $ et 10 $ le million (cache écrit 2,50 $, lu 0,10 $), Haiku 0,10 $ et 0,50 $ (cache écrit 0,125 $, lu 0,01 $). Avant chaque appel, le plafond de 50 $ de la veille est vérifié (`plafond`) : « plafond atteint : N $ dépensés sur 50 $ ». L'écran montre `cout_demande`, la somme de `veille_cout` entre le début et la fin de la demande. Une demande sans analyse coûte environ 0,01 $.
 
-**Interrompue** : l'app quittée en route laisse la demande `en_cours` ; l'écran la montre en échec, « interrompue », et la suivante l'écrit ainsi en base (`Store::nouvelle_demande`).
+**Interrompue** : l'app quittée en route laisse la demande `en_cours` ; l'écran la montre en échec (`DemandeVeille::INTERROMPUE`), avec « Relancer », et la suivante l'écrit ainsi en base (`Store::nouvelle_demande`). Chaque recherche écrit ses vidéos dans `veille_video` sitôt faite : celles trouvées avant l'arrêt restent dans la bank, et le passage suivant les classe.
 
 ## Ce qui peut casser
 

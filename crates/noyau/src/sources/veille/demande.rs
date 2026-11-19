@@ -566,7 +566,7 @@ mod tests {
         // l'app quittée en route : la suivante la marque interrompue
         let d = creer(&s, "roleo", "encore", None).unwrap();
         let interrompue = s.demande_veille(&premiere.id).unwrap().unwrap();
-        assert_eq!((interrompue.etat.as_str(), interrompue.erreur.as_deref()), (DemandeVeille::ECHOUEE, Some("interrompue")));
+        assert_eq!((interrompue.etat.as_str(), interrompue.erreur.as_deref()), (DemandeVeille::ECHOUEE, Some(DemandeVeille::INTERROMPUE)));
 
         s.noter_demande(&d.id, "Mots-clés : « a »").unwrap();
         s.noter_demande(&d.id, "Retenue : @x").unwrap();
