@@ -64,4 +64,4 @@ Le contenu suit `BarreMenus.swift` : l'heure du dernier passage, 4 chiffres du j
 
 `ui/js/palette.js`, ouverte par ⌘K (Ctrl+K). Sans saisie : les écrans, « Tout relancer », la relance de chaque source, pause ou reprise, le choix du business. Dès qu'on tape, la palette ajoute après ses résultats ceux de `chercher` (`src/ecrans/palette.rs`, `Lectures::recherche` dans `noyau/src/lecture/recherche.rs`) : les vidéos, les apps suivies et les tâches ouvertes du business affiché dont le titre ou le détail contient le texte, sans accents ni casse, 40 au plus. Une réponse arrivée après une nouvelle frappe est ignorée.
 
-Choisir un résultat ouvre son écran (Vidéos, Apps de potes, SAV) avec `ctx.choix = { genre, id }` (`genre` : `video`, `app` ou `tache`), valable pour ce seul rendu : l'écran peut s'en servir pour ouvrir ou mettre en avant l'élément.
+Choisir un résultat ouvre son écran (Vidéos, Apps de potes, SAV) avec `ctx.choix = { genre, id }` (`genre` : `video`, `app` ou `tache`), valable pour ce seul rendu. Apps de potes en fait l'app de la courbe et du détail ; SAV s'ouvre seulement, comme dans la version Mac.

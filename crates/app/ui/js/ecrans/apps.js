@@ -150,8 +150,14 @@ function panneauDetail(d, vue) {
 
 // la page
 
+/** L'app choisie dans la palette devient celle de la courbe. */
+function prendreChoix(ctx) {
+  if (ctx.choix?.genre === "app") local.app = ctx.choix.id;
+}
+
 async function rendre(racine, ctx) {
   const vue = { ctx };
+  prendreChoix(ctx);
   const ajout = ajoutApp(vue);
 
   async function dessiner() {
@@ -193,6 +199,7 @@ async function rendre(racine, ctx) {
   await dessiner();
   ctx.abonner((c) => {
     vue.ctx = c;
+    prendreChoix(c);
     return dessiner();
   });
 }
