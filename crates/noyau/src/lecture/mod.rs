@@ -288,23 +288,14 @@ impl<'a> Lectures<'a> {
         let sql = format!("
             select r.*, c.email from sav_retour r left join sav_compte c on c.business = r.business and c.uid = r.uid
             where r.business in {} {filtre} order by r.at desc limit ?", self.dans());
-        Ok(self.q(&sql, self.autour(p![], p![limite]))?.iter().filter_map(|l| Some(RetourSAV {
-            business: l.texte("business")?,
-            id: l.texte("id")?,
-            at: l.date("at")?,
-            uid: l.texte("uid"),
-            email: l.texte("email"),
-            source: l.texte("source"),
-            categorie: l.texte("categorie"),
-            etoiles: l.entier("etoiles"),
-            message: l.texte("message").unwrap_or_default(),
-            citation: l.texte("citation"),
-            conversation: l.texte("conversation"),
-            traite: l.booleen("traite"),
-            traite_le: l.date("traite_le"),
-            plateforme: l.texte("plateforme"),
-            build: l.texte("build"),
-        })).collect())
+        Ok(self.q(&sql, self.autour(p![], p![limite]))?.iter().filter_map(retour).collect())
+    }
+
+    /// Un retour par sa clé, pour le traiter ou le rouvrir.
+    pub fn retour_sav(&self, business: &str, id: &str) -> Res<Option<RetourSAV>> {
+        Ok(self.q("
+            select r.*, c.email from sav_retour r left join sav_compte c on c.business = r.business and c.uid = r.uid
+            where r.business = ? and r.id = ?", p![business, id])?.first().and_then(retour))
     }
 
     /// L'email connu d'un compte, vide pour un invité, None s'il n'a pas encore été lu.
@@ -438,6 +429,26 @@ impl<'a> Lectures<'a> {
             repondu: l.booleen("repondu"),
         })).collect())
     }
+}
+
+fn retour(l: &Ligne) -> Option<RetourSAV> {
+    Some(RetourSAV {
+        business: l.texte("business")?,
+        id: l.texte("id")?,
+        at: l.date("at")?,
+        uid: l.texte("uid"),
+        email: l.texte("email"),
+        source: l.texte("source"),
+        categorie: l.texte("categorie"),
+        etoiles: l.entier("etoiles"),
+        message: l.texte("message").unwrap_or_default(),
+        citation: l.texte("citation"),
+        conversation: l.texte("conversation"),
+        traite: l.booleen("traite"),
+        traite_le: l.date("traite_le"),
+        plateforme: l.texte("plateforme"),
+        build: l.texte("build"),
+    })
 }
 
 fn fil(l: &Ligne) -> Option<FilSAV> {

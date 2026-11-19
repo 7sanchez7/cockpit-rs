@@ -11,6 +11,7 @@ mod lectures;
 mod percee;
 mod sante;
 mod recherche;
+mod sav;
 mod store;
 mod videos;
 mod widget;
