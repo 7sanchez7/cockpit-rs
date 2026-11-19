@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = ["crates/noyau", "crates/cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+noyau = { path = "crates/noyau" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip", "brotli", "deflate", "multipart"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+async-trait = "0.1"
+parking_lot = "0.12"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+jsonwebtoken = "9"
+dirs = "5"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+regex = "1"
+futures = "0.3"
+thiserror = "2"
