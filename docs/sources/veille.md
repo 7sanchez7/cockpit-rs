@@ -90,7 +90,7 @@ Une consigne libre tapée dans l'écran Veille (« Trouve des vidéos scriptées
 
 ## Ce qui peut casser
 
-- Sur Mac, l'app sans accès complet au disque (Réglages Système > Confidentialité et sécurité) ne lit pas les cookies de Safari : « Safari illisible », et chaque recherche, d'un passage ou d'une demande, échoue. Un bundle signé ad hoc (`cargo tauri build --debug`) change de signature à chaque build et perd cet accès.
+- Sur Mac, l'app sans accès complet au disque (Réglages Système > Confidentialité et sécurité) ne lit pas les cookies de Safari : « Safari illisible », et chaque recherche, d'un passage ou d'une demande, échoue. Un bundle signé ad hoc (`cargo tauri build --debug`) change de signature à chaque build et perd cet accès ; signé par un certificat Apple Development, il le garde ([`runbook.md`](../runbook.md) § Installer).
 - Pas de session (Safari expiré sur Mac, fenêtre de connexion jamais ouverte ailleurs) : `Hote::cookies` rend `non_configure`, la plateforme est sautée avec son message, l'autre continue.
 - La page change ses chemins d'API : plus rien ne passe les filtres, « aucune réponse capturée ». Regarder les requêtes de la page dans un navigateur, mettre à jour les filtres dans `ouvrir`.
 - La page change la forme de ses objets : ajouter le nouveau nom de champ dans `parseurs::tiktok` ou `parseurs::instagram`, et un exemple figé dans leurs tests.

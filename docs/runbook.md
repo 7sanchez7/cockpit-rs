@@ -36,7 +36,7 @@ Sur une autre machine, pour un autre business : cloner, puis `claude "/installer
 2. `cd crates/app && cargo tauri build`, puis lancer l'installeur de `target/release/bundle/` (`nsis/*-setup.exe` sous Windows, `macos/Cockpit.app` à glisser dans Applications sur Mac). Pour essayer sans installer : `cargo run -p cockpit`.
 3. Les clés : Réglages, onglet Clés (rangées dans le trousseau du système). Sinon une variable d'environnement du même nom, Secret Manager pour un business avec `firebaseProject`, ou, sur Mac, les clés déjà rangées par la version SwiftUI (même trousseau). Les fichiers de clés App Store Connect et Play à leur place (§ Prérequis, [`collecte.md`](collecte.md) § Secrets) ; les sessions (§ Prérequis).
 
-L'app Mac fabriquée ainsi n'est pas signée : au premier lancement, clic droit, Ouvrir. Sous Windows, SmartScreen demande « Informations complémentaires », « Exécuter quand même ».
+L'app Mac fabriquée ainsi n'est pas signée : au premier lancement, clic droit, Ouvrir. Pour qu'elle garde l'accès complet au disque d'un build à l'autre, la signer avec un certificat Apple Development du trousseau : `APPLE_SIGNING_IDENTITY="Apple Development: …" cargo tauri build --bundles app` (les noms : `security find-identity -v -p codesigning`), puis remplacer `Cockpit.app` dans Applications ; macOS redemande l'accès une seule fois. Sous Windows, SmartScreen demande « Informations complémentaires », « Exécuter quand même ».
 
 ## Commandes
 
