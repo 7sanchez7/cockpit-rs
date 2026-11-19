@@ -11,6 +11,8 @@ pub const CLE: &str = "LURKAPI_API_KEY";
 /// Le réglage (dans la base) où Réglages range la clé saisie à la main ; il passe avant le trousseau.
 pub const REGLAGE: &str = "veille.cle_scrappeur";
 const BASE: &str = "https://api.lurkapi.com";
+/// Les reprises d'un appel en 5xx ou 429, après celles de `Http`.
+const REPRISES: u64 = 2;
 
 /// La clé LurkAPI : le réglage saisi dans Réglages d'abord, puis l'environnement, le trousseau ou Secret Manager.
 pub async fn cle(ctx: &Contexte) -> Option<String> {
@@ -37,9 +39,20 @@ fn url(chemin: &str, params: &[(&str, String)]) -> String {
     format!("{BASE}{chemin}?{q}")
 }
 
-/// Un appel GET à LurkAPI ; rend l'objet de la réponse, `success` vérifié.
+/// Un appel GET à LurkAPI ; rend l'objet de la réponse, `success` vérifié. Un 5xx ou un 429 est repris après `Http`
+/// (qui réessaie déjà trois fois) : LurkAPI ne facture pas un 5xx, seul le délai de l'amont change.
 async fn appel(http: &Http, cle: &str, chemin: &str, params: &[(&str, String)]) -> Res<Value> {
-    let o = http.objet(&Requete::get(url(chemin, params)).entete("x-api-key", cle)).await?;
+    let requete = Requete::get(url(chemin, params)).entete("x-api-key", cle);
+    let mut essai = 0;
+    let o = loop {
+        match http.objet(&requete).await {
+            Err(Erreur::Http(code, _)) if (code == 429 || code >= 500) && essai < REPRISES => {
+                essai += 1;
+                tokio::time::sleep(std::time::Duration::from_secs(3 * essai)).await;
+            }
+            r => break r?,
+        }
+    };
     if o.get("success").and_then(Value::as_bool) != Some(true) {
         let msg = o.get("error").and_then(Value::as_str).unwrap_or("réponse LurkAPI");
         return Err(format_err(format!("LurkAPI : {msg}")));

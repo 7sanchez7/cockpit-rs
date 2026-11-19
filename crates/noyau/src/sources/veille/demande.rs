@@ -1,13 +1,14 @@
 //! Une demande libre à Claude depuis l'écran Veille : Sonnet 5.5 choisit les mots-clés, Haiku 5.5 cherche sur TikTok
 //! et Instagram, analyse et retient les vidéos qui répondent, puis écrit une synthèse. Voir docs/sources/veille.md.
 use super::analyse::{self, appeler, facturer, texte, HAIKU, SONNET};
-use super::{chercher, ouvrir, pause, videos_par_mot, PLATEFORMES};
+use super::{chercher, classement, ouvrir, pause, videos_par_mot, PLATEFORMES};
 use crate::business::Business;
 use crate::collecte::fournisseurs::Fournisseurs;
 use crate::collecte::{miniatures, Contexte, Navigateur};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::lecture::veille::PLAFOND_VEILLE_USD;
+use crate::lecture::Lectures;
 use crate::modeles::Plateforme;
 use crate::modeles_veille::{DemandeVeille, MotVeille, VideoVeille};
 use crate::store::Store;
@@ -52,8 +53,9 @@ pub struct Appel {
     pub entree: Value,
 }
 
-/// Écrit une demande qui commence ; celle restée en cours passe en échec.
-pub fn creer(store: &Store, business: &str, prompt: &str) -> Res<DemandeVeille> {
+/// Écrit une demande qui commence, à la suite de la conversation `fil` ou dans une nouvelle ; celle restée en cours
+/// passe en échec.
+pub fn creer(store: &Store, business: &str, prompt: &str, fil: Option<&str>) -> Res<DemandeVeille> {
     let prompt = prompt.trim();
     if prompt.is_empty() {
         return Err(non("la demande est vide"));
@@ -61,9 +63,14 @@ pub fn creer(store: &Store, business: &str, prompt: &str) -> Res<DemandeVeille> 
     if prompt.chars().count() > PROMPT_MAX {
         return Err(non(format!("la demande dépasse {PROMPT_MAX} caractères")));
     }
+    let id = uuid::Uuid::new_v4().to_string().to_uppercase();
+    let fil = match fil {
+        Some(f) => store.demande_veille(f)?.filter(|d| d.business == business).ok_or_else(|| non("conversation introuvable"))?.fil,
+        None => id.clone(),
+    };
     let d = DemandeVeille {
-        id: uuid::Uuid::new_v4().to_string().to_uppercase(), business: business.into(), prompt: prompt.into(),
-        debut: jour::maintenant(), fin: None, etat: DemandeVeille::EN_COURS.into(), journal: vec![], synthese: None, erreur: None,
+        id, business: business.into(), prompt: prompt.into(), debut: jour::maintenant(), fin: None,
+        etat: DemandeVeille::EN_COURS.into(), journal: vec![], synthese: None, erreur: None, fil,
     };
     store.nouvelle_demande(&d)?;
     store.a_change();
@@ -73,10 +80,16 @@ pub fn creer(store: &Store, business: &str, prompt: &str) -> Res<DemandeVeille> 
 /// Mène une demande jusqu'au bout et écrit sa fin : la synthèse, ou l'erreur qui l'a arrêtée.
 pub async fn mener(ctx: &Contexte, d: &DemandeVeille) {
     let fournisseurs = Fournisseurs::resoudre(ctx).await;
-    let mut e = Enquete { ctx, d, navigateurs: HashMap::new(), fournisseurs, cherches: 0, analyses: 0, autres: 0, essayes: vec![] };
+    let mut e = Enquete {
+        ctx, d, navigateurs: HashMap::new(), fournisseurs, cherches: 0, analyses: 0, autres: 0, essayes: vec![], avant: String::new(),
+    };
     let r = e.enqueter().await;
     for nav in e.navigateurs.into_values().flatten() {
         nav.fermer().await;
+    }
+    // les vidéos trouvées entrent classées dans la bank
+    for echec in classement::classer(ctx, &jour::maintenant()).await {
+        let _ = ctx.store.noter_demande(&d.id, &format!("Échec du classement : {echec}"));
     }
     let fin = jour::maintenant();
     let ecrit = match &r {
@@ -102,6 +115,8 @@ struct Enquete<'a> {
     autres: usize,
     /// Les recherches faites, pour que Sonnet ne les repropose pas.
     essayes: Vec<String>,
+    /// Ce qui s'est dit avant dans la conversation, vide pour une première demande.
+    avant: String,
 }
 
 impl Enquete<'_> {
@@ -110,9 +125,11 @@ impl Enquete<'_> {
         let b = ctx.businesses.iter().find(|b| b.id == self.d.business)
             .ok_or_else(|| non(format!("business inconnu : {}", self.d.business)))?;
         let cle = ctx.secrets.valeur(&b.config.claude, b).await?;
-        let mots = self.mots(b, &cle, None).await?;
-        let systeme = systeme(&self.d.prompt, &b.nom, &jour::maintenant());
-        let mut messages = vec![json!({"role": "user", "content": premier_message(&mots)})];
+        self.avant = avant(&Lectures::new(&ctx.store.db, vec![b.clone()]), self.d)?;
+        // une suite part de la conversation : Haiku répond, ou redemande des mots-clés s'il doit chercher
+        let premier = if self.avant.is_empty() { premier_message(&self.mots(b, &cle, None).await?) } else { SUITE.into() };
+        let systeme = systeme(&self.d.prompt, &b.nom, &jour::maintenant(), &self.avant);
+        let mut messages = vec![json!({"role": "user", "content": premier})];
         for _ in 0..TOURS_MAX {
             plafond(&ctx.store)?;
             let o = appeler(&ctx.http, &cle, &corps_boucle(&systeme, &messages), DELAI_S).await?;
@@ -168,7 +185,7 @@ impl Enquete<'_> {
         plafond(&self.ctx.store)?;
         self.noter(if raison.is_some() { "Sonnet cherche d'autres mots-clés" } else { "Sonnet choisit les mots-clés" })?;
         let suivis: Vec<String> = self.ctx.store.mots_veille()?.into_iter().filter(|m| m.actif && m.business == b.id).map(|m| m.mot).collect();
-        let consigne = consigne_mots(&self.d.prompt, &b.nom, &suivis, &self.essayes, raison);
+        let consigne = consigne_mots(&self.d.prompt, &b.nom, &suivis, &self.essayes, raison, &self.avant);
         let o = appeler(&self.ctx.http, cle, &corps_mots(&consigne), DELAI_S).await?;
         facturer(self.ctx, &self.objet(), &SONNET, &o, &jour::maintenant())?;
         let mots = lire_mots(&o)?;
@@ -182,7 +199,6 @@ impl Enquete<'_> {
         if self.cherches >= CHERCHES_MAX {
             return Err(non(format!("{CHERCHES_MAX} recherches au plus, déjà faites")));
         }
-        self.cherches += 1;
         self.noter(&format!("Recherche « {mot} » sur {}", p.nom()))?;
         // sans fournisseur, un humain qui cherche, pas une rafale : la pause de la veille entre deux recherches d'un même site
         if !self.fournisseurs.configure() {
@@ -197,14 +213,15 @@ impl Enquete<'_> {
         let voulues = videos_par_mot(&self.ctx.store)?;
         let nav = self.navigateurs.get(&p).and_then(|n| n.as_deref());
         let gardees = chercher(self.ctx, p, &m, voulues, &self.fournisseurs, nav, &jour::maintenant()).await?;
+        // une recherche qui échoue ne compte pas
+        self.cherches += 1;
         let images: HashMap<String, String> = gardees.iter().filter_map(|t| Some((t.id(), t.image.clone()?))).collect();
         let echecs = miniatures::telecharger(&images, &self.ctx.http).await;
         if !echecs.is_empty() {
             self.noter(&format!("Miniatures : {} échecs ({})", echecs.len(), echecs.join(" ; ")))?;
         }
         let ids: Vec<String> = gardees.iter().map(|t| t.id()).collect();
-        let mut videos = self.ctx.store.videos_veille(&format!("where v.id in ({})", vec!["?"; ids.len().max(1)].join(", ")),
-            ids.iter().map(Into::into).collect())?;
+        let mut videos = self.ctx.store.videos_veille_par_ids(&ids)?;
         videos.sort_by_key(|v| std::cmp::Reverse(v.publiee));
         self.essayes.push(format!("« {mot} » sur {} : {} vidéos", p.nom(), videos.len()));
         self.noter(&format!("« {mot} » sur {} : {} vidéos", p.nom(), videos.len()))?;
@@ -246,7 +263,7 @@ impl Enquete<'_> {
 /// Une erreur dite telle quelle.
 fn non(m: impl Into<String>) -> Erreur { Erreur::Commande(m.into()) }
 
-fn plafond(store: &Store) -> Res<()> {
+pub(crate) fn plafond(store: &Store) -> Res<()> {
     let depense = store.depense_veille_usd()?;
     if depense >= PLAFOND_VEILLE_USD {
         return Err(non(format!("plafond atteint : {} $ dépensés sur {} $", depense as i64, PLAFOND_VEILLE_USD as i64)));
@@ -254,18 +271,40 @@ fn plafond(store: &Store) -> Res<()> {
     Ok(())
 }
 
+// la conversation
+
+/// Le premier message d'une suite.
+const SUITE: &str = "Voici la nouvelle demande, à la suite de la conversation.";
+
+/// Les demandes d'avant dans la conversation : chacune, sa réponse et les vidéos qu'elle a retenues ; vide pour une
+/// première demande.
+pub fn avant(l: &Lectures, d: &DemandeVeille) -> Res<String> {
+    let mut lignes = vec![];
+    for x in l.fil_veille(&d.fil)?.into_iter().take_while(|x| x.id != d.id) {
+        lignes.push(format!("- Demande : {}", x.prompt));
+        if let Some(r) = x.synthese.as_deref().or(x.erreur.as_deref()) {
+            lignes.push(format!("  Réponse : {r}"));
+        }
+        for (v, raison) in l.retenues_veille(&x.id)? {
+            lignes.push(format!("  Retenue : {} @{} sur {} : {raison}", v.id, v.compte, v.plateforme.nom()));
+        }
+    }
+    Ok(if lignes.is_empty() { String::new() } else { format!("Avant, dans cette conversation :\n{}", lignes.join("\n")) })
+}
+
 // Sonnet : les mots-clés
 
-pub fn consigne_mots(prompt: &str, business: &str, suivis: &[String], essayes: &[String], raison: Option<&str>) -> String {
+pub fn consigne_mots(prompt: &str, business: &str, suivis: &[String], essayes: &[String], raison: Option<&str>, avant: &str) -> String {
     let suivis = if suivis.is_empty() { "aucun".into() } else { suivis.join(", ") };
+    let faites = if essayes.is_empty() { String::new() } else { format!("\nRecherches déjà faites, qui ne suffisent pas : {}.", essayes.join(" ; ")) };
     let relance = match raison {
-        Some(r) => format!("\nRecherches déjà faites, qui ne suffisent pas : {}.\nPourquoi : {r}\nPropose d'autres angles.",
-                           essayes.join(" ; ")),
+        Some(r) => format!("{faites}\nPourquoi : {r}\nPropose d'autres angles."),
         None => String::new(),
     };
+    let avant = if avant.is_empty() { String::new() } else { format!("{avant}\n") };
     format!("\
 Tu prépares une veille de vidéos courtes sur TikTok et Instagram pour {business}.
-La demande : {prompt}
+{avant}La demande : {prompt}
 Mots-clés déjà suivis par la veille régulière : {suivis}.{relance}
 Propose de 4 à {MOTS_MAX} recherches à taper dans la barre de recherche de TikTok ou d'Instagram pour trouver les vidéos qui
 répondent à la demande : des requêtes courtes comme un humain les tape, dans la langue des vidéos visées, pas forcément en
@@ -321,24 +360,30 @@ pub fn lire_mots(o: &Map<String, Value>) -> Res<Vec<MotPropose>> {
 
 // Haiku : la boucle
 
-pub fn systeme(prompt: &str, business: &str, maintenant: &Date) -> String {
+pub fn systeme(prompt: &str, business: &str, maintenant: &Date, avant: &str) -> String {
+    let suite = if avant.is_empty() { String::new() } else { format!("\
+{avant}
+C'est une suite : réponds à la nouvelle demande en t'appuyant sur ce qui précède. Si elle ne demande pas de nouvelles
+vidéos (une question, un avis, un script), réponds directement sans outil ; sinon cherche, `{AUTRES_MOTS}` te donne des
+mots-clés. Une vidéo déjà retenue se cite par son compte.
+") };
     format!("\
 Tu fais la veille de vidéos courtes de {business} sur TikTok et Instagram. Nous sommes le {}.
-La demande : {prompt}
+{suite}La demande : {prompt}
 
 Ta méthode, avec tes outils :
-- `{CHERCHER}` tape un mot-clé dans la recherche d'une plateforme et rend ses vidéos les plus récentes au-dessus de
-  `vues_min` vues ({VUES_MIN} par défaut), avec leurs stats ; `ratio` = vues / médiane du compte, quand on la connaît.
+- `{CHERCHER}` tape un mot-clé dans la recherche d'une plateforme et rend ses vidéos de moins d'un an, les plus récentes
+  d'abord, au-dessus de `vues_min` vues ({VUES_MIN} par défaut), avec leurs stats ; `ratio` = vues / médiane du compte, quand on la connaît.
   {CHERCHES_MAX} recherches au plus, une recherche prend une minute.
 - `{ANALYSER}` regarde une vidéo (images clés et ce qui est dit) : hook, format, structure, ce qui la distingue.
   {ANALYSES_MAX} analyses au plus : garde-les pour les vidéos qui semblent répondre à la demande.
 - `{AUTRES_MOTS}` demande d'autres mots-clés quand les recherches ne rendent rien d'utile, {AUTRES_MOTS_MAX} fois au plus.
 - `{RETENIR}` garde une vidéo qui répond à la demande, avec sa raison en une phrase en français. Retiens-en de 3 à 12, la
   meilleure d'abord, seulement des vidéos rendues par une recherche.
-Une vidéo qui a marché : beaucoup de vues pour son compte, récente, beaucoup de partages et d'enregistrements. Juge si
+Une vidéo qui a marché : beaucoup de vues pour son compte, récente (à égalité, prends la plus récente), beaucoup de partages et d'enregistrements. Juge si
 elle répond à la demande sur sa légende, et sur son analyse quand tu hésites.
-Quand tu as fini, réponds par une synthèse en français de 3 à 6 phrases, sans markdown : ce que tu as trouvé, les
-mécaniques qui reviennent, la vidéo à tourner en premier.", maintenant.format("%Y-%m-%d"))
+Quand tu as fini, réponds en français, sans markdown, en 3 à 6 phrases : ce que tu as trouvé, les mécaniques qui
+reviennent, la vidéo à tourner en premier.", maintenant.format("%Y-%m-%d"))
 }
 
 pub fn premier_message(mots: &[MotPropose]) -> String {
@@ -353,7 +398,7 @@ pub fn outils() -> Value {
     };
     json!([
         {"name": CHERCHER,
-         "description": "Cherche un mot-clé sur TikTok ou Instagram et rend les vidéos récentes au-dessus de vues_min vues, avec leurs stats.",
+         "description": "Cherche un mot-clé sur TikTok ou Instagram et rend les vidéos de moins d'un an, les plus récentes d'abord, au-dessus de vues_min vues, avec leurs stats.",
          "input_schema": objet(json!({
              "mot": {"type": "string", "description": "La recherche telle qu'un humain la tape"},
              "plateforme": {"type": "string", "enum": PLATEFORMES.map(Plateforme::brut)},
@@ -429,6 +474,9 @@ pub fn fiche(v: &VideoVeille) -> Value {
         "dureeS": v.duree_s.map(f64::round),
         "legende": v.legende.as_deref().map(|l| l.chars().take(LEGENDE_MAX).collect::<String>()),
         "analysee": v.analyse.is_some(),
+        "app": v.app_promue(),
+        "langue": v.langue,
+        "genre": v.genre,
     })
 }
 
@@ -446,7 +494,7 @@ mod tests {
 
     #[test]
     fn corps_des_deux_modeles() {
-        let m = corps_mots(&consigne_mots("des vidéos scriptées", "Roleo", &[], &[], None));
+        let m = corps_mots(&consigne_mots("des vidéos scriptées", "Roleo", &[], &[], None, ""));
         assert_eq!(m["model"], SONNET.modele);
         // Sonnet 5.5 refuse `thinking: disabled` : sa réflexion reste adaptative
         assert!(m.get("thinking").is_none());
@@ -461,11 +509,14 @@ mod tests {
 
     #[test]
     fn consigne_de_relance() {
-        let c = consigne_mots("x", "Roleo", &["espagnol".into()], &["« a » sur TikTok : 0 vidéos".into()], Some("rien de scripté"));
+        let c = consigne_mots("x", "Roleo", &["espagnol".into()], &["« a » sur TikTok : 0 vidéos".into()], Some("rien de scripté"), "");
         assert!(c.contains("Mots-clés déjà suivis par la veille régulière : espagnol."));
         assert!(c.contains("« a » sur TikTok : 0 vidéos"));
         assert!(c.contains("Pourquoi : rien de scripté"));
-        assert!(!consigne_mots("x", "Roleo", &[], &[], None).contains("Pourquoi"));
+        assert!(!consigne_mots("x", "Roleo", &[], &[], None, "").contains("Pourquoi"));
+        // une suite, sans recherche faite : la conversation passe, pas de liste vide
+        let suite = consigne_mots("x", "Roleo", &[], &[], Some("plus récent"), "Avant, dans cette conversation :\n- Demande : a");
+        assert!(suite.contains("- Demande : a\nLa demande : x") && !suite.contains("déjà faites"));
     }
 
     #[test]
@@ -508,14 +559,14 @@ mod tests {
     #[test]
     fn demande_en_base() {
         let s = Store::memoire().unwrap();
-        assert!(creer(&s, "roleo", "   ").is_err());
-        assert!(creer(&s, "roleo", &"x".repeat(PROMPT_MAX + 1)).is_err());
-        let premiere = creer(&s, "roleo", " trouve des vidéos ").unwrap();
+        assert!(creer(&s, "roleo", "   ", None).is_err());
+        assert!(creer(&s, "roleo", &"x".repeat(PROMPT_MAX + 1), None).is_err());
+        let premiere = creer(&s, "roleo", " trouve des vidéos ", None).unwrap();
         assert_eq!(premiere.prompt, "trouve des vidéos");
         // l'app quittée en route : la suivante la marque interrompue
-        let d = creer(&s, "roleo", "encore").unwrap();
-        let avant = s.demande_veille(&premiere.id).unwrap().unwrap();
-        assert_eq!((avant.etat.as_str(), avant.erreur.as_deref()), (DemandeVeille::ECHOUEE, Some("interrompue")));
+        let d = creer(&s, "roleo", "encore", None).unwrap();
+        let interrompue = s.demande_veille(&premiere.id).unwrap().unwrap();
+        assert_eq!((interrompue.etat.as_str(), interrompue.erreur.as_deref()), (DemandeVeille::ECHOUEE, Some("interrompue")));
 
         s.noter_demande(&d.id, "Mots-clés : « a »").unwrap();
         s.noter_demande(&d.id, "Retenue : @x").unwrap();
@@ -543,6 +594,37 @@ mod tests {
         assert!((l.cout_demande(&lue).unwrap() - 0.004).abs() < 1e-9);
         let autre: Business = serde_json::from_str(r#"{"id": "app2", "nom": "App 2"}"#).unwrap();
         assert!(Lectures::new(&s.db, vec![autre]).demande_veille().unwrap().is_none());
+
+        // la bibliothèque garde pour toujours ce qu'une demande a retenu, et oublie le reste après 30 jours
+        for (brut, compte) in [("3", "vieille-retenue"), ("4", "vieille-oubliee")] {
+            let mut t = Trouvaille::nouvelle(Plateforme::Tiktok, brut, compte);
+            t.vues = Some(50_000);
+            s.trouvaille(&t, "roleo", Some("app"), &(d.debut - Duration::days(100))).unwrap();
+        }
+        let vieille = s.videos_veille("where v.compte = 'vieille-retenue'", p![]).unwrap().remove(0);
+        s.retenir_video(&d.id, &vieille.id, "toujours bonne").unwrap();
+        let comptes: Vec<String> = l.videos_veille(30).unwrap().into_iter().map(|v| v.compte).collect();
+        assert!(comptes.contains(&"vieille-retenue".to_string()) && !comptes.contains(&"vieille-oubliee".to_string()));
+        assert!(comptes.contains(&"a".to_string()));
+
+        // une suite : même conversation, et Claude relit ce qui s'est dit avant
+        let suite = creer(&s, "roleo", "et en plus récent ?", Some(&d.id)).unwrap();
+        assert_eq!(suite.fil, d.fil);
+        assert!(creer(&s, "app2", "x", Some(&d.id)).is_err());
+        assert!(creer(&s, "roleo", "x", Some("inconnue")).is_err());
+        let contexte = avant(&l, &suite).unwrap();
+        assert!(contexte.contains("- Demande : encore\n  Réponse : Synthèse.\n  Retenue : 2 @b sur TikTok : la meilleure, vraiment"));
+        assert!(!contexte.contains("trouve des vidéos") && !contexte.contains("plus récent"));
+        assert!(avant(&l, &d).unwrap().is_empty());
+        let fils = l.fils_veille().unwrap();
+        assert_eq!((fils[0].id.as_str(), fils[0].titre.as_str(), fils[0].demandes), (d.fil.as_str(), "encore", 2));
+        assert_eq!(l.fil_veille(&d.fil).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn recherche_sans_resultat_ne_plante_pas() {
+        let s = Store::memoire().unwrap();
+        assert!(s.videos_veille_par_ids(&[]).unwrap().is_empty());
     }
 
     #[test]
@@ -558,6 +640,6 @@ mod tests {
         assert_eq!(f["publiee"], t0.format("%Y-%m-%d").to_string());
         assert_eq!(f["legende"].as_str().unwrap().chars().count(), LEGENDE_MAX);
         assert_eq!(f["analysee"], false);
-        assert!(systeme("x", "Roleo", &t0).contains(&format!("Nous sommes le {}.", t0.format("%Y-%m-%d"))));
+        assert!(systeme("x", "Roleo", &t0, "").contains(&format!("Nous sommes le {}.", t0.format("%Y-%m-%d"))));
     }
 }

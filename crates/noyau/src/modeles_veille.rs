@@ -80,6 +80,8 @@ pub struct DemandeVeille {
     pub journal: Vec<String>,
     pub synthese: Option<String>,
     pub erreur: Option<String>,
+    /// La conversation : l'id de sa première demande, le sien pour une première demande.
+    pub fil: String,
 }
 
 impl DemandeVeille {
@@ -92,7 +94,7 @@ impl DemandeVeille {
             id: l.texte("id")?, business: l.texte("business")?, prompt: l.texte("prompt")?, debut: l.date("debut")?,
             fin: l.date("fin"), etat: l.texte("etat")?,
             journal: l.texte("journal").and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default(),
-            synthese: l.texte("synthese"), erreur: l.texte("erreur"),
+            synthese: l.texte("synthese"), erreur: l.texte("erreur"), fil: l.texte("fil").or_else(|| l.texte("id"))?,
         })
     }
 }
@@ -123,13 +125,23 @@ pub struct VideoVeille {
     /// Vues gagnées par heure entre les deux derniers relevés.
     pub vitesse: Option<f64>,
     pub analyse: Option<AnalyseVeille>,
+    /// Gardée par une demande à Claude.
+    pub retenue: bool,
+    /// L'app ou le produit dont la vidéo fait la promo, quand il est clairement nommé (classement).
+    pub app: Option<String>,
+    /// La langue parlée ou écrite, code de `LANGUES` (classement).
+    pub langue: Option<String>,
+    /// Le genre de la vidéo, un de `GENRES` (classement).
+    pub genre: Option<String>,
 }
 
 impl VideoVeille {
     pub const SQL: &'static str = "
         select v.id, v.business, v.plateforme, v.compte, v.url, v.legende, v.publiee, v.duree_s, v.mot, v.trouvee, v.media,
+            v.app, v.langue, v.genre,
             r.vues, r.likes, r.commentaires, r.partages, r.enregistrements, r.at as releve_at,
             c.mediane, c.abonnes, a.donnees as analyse,
+            exists (select 1 from veille_retenue t where t.video = v.id) as retenue,
             (select p.vues from veille_releve p where p.video = v.id and p.at < r.at order by p.at desc limit 1) as vues_avant,
             (select p.at from veille_releve p where p.video = v.id and p.at < r.at order by p.at desc limit 1) as at_avant
         from veille_video v
@@ -156,7 +168,8 @@ impl VideoVeille {
             trouvee: l.date("trouvee").unwrap_or_else(jour::loin_passe), media: l.texte("media"), vues,
             likes: l.entier("likes"), commentaires: l.entier("commentaires"), partages: l.entier("partages"),
             enregistrements: l.entier("enregistrements"), releve_le, mediane: l.entier("mediane"), abonnes: l.entier("abonnes"),
-            vitesse, analyse: l.texte("analyse").and_then(|s| serde_json::from_str(&s).ok()),
+            vitesse, analyse: l.texte("analyse").and_then(|s| serde_json::from_str(&s).ok()), retenue: l.booleen("retenue"),
+            app: l.texte("app"), langue: l.texte("langue"), genre: l.texte("genre"),
         })
     }
 
@@ -174,6 +187,30 @@ impl VideoVeille {
     pub fn outlier(&self) -> bool { ScoreVeille::outlier(self.ratio(), self.vues, self.pull()) }
     /// Vaut une analyse de Claude : outlier, ou au moins `RATIO_PERCEE` fois la médiane de son compte.
     pub fn a_analyser(&self) -> bool { self.outlier() || self.ratio().is_some_and(|r| r >= ScoreVeille::RATIO_PERCEE) }
+    /// L'app promue : celle de l'analyse (Claude a vu la vidéo), sinon celle du classement (légende et compte).
+    pub fn app_promue(&self) -> Option<&str> {
+        self.analyse.as_ref().and_then(|a| a.app.as_deref()).or(self.app.as_deref())
+    }
+    pub fn nom_langue(code: &str) -> &str {
+        Self::LANGUES.iter().find(|(c, _)| *c == code).map_or(code, |(_, n)| n)
+    }
+
+    /// Les langues du classement : (code, nom).
+    pub const LANGUES: [(&'static str, &'static str); 7] = [
+        ("fr", "Français"), ("en", "Anglais"), ("es", "Espagnol"), ("pt", "Portugais"), ("it", "Italien"), ("de", "Allemand"),
+        ("autre", "Autre langue"),
+    ];
+    pub const GENRES: [&'static str; 9] = [
+        "cours", "astuces", "sketch", "storytime", "réaction", "témoignage", "trend", "pub", "autre",
+    ];
+}
+
+/// Le classement d'une vidéo par Claude, d'après sa légende, son compte et son analyse.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Classement {
+    pub app: Option<String>,
+    pub langue: Option<String>,
+    pub genre: Option<String>,
 }
 
 /// Ce que Claude a vu d'une vidéo de veille (JSON dans `veille_analyse`, mêmes clés que la version macOS).
@@ -195,6 +232,9 @@ pub struct AnalyseVeille {
     pub ecart: String,
     pub adaptable: i64,
     pub idee: String,
+    /// L'app ou le produit promu, s'il est clairement nommé ; absent des analyses d'avant le 19 nov. 2026.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

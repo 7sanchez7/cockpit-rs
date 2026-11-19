@@ -218,9 +218,6 @@
   --t-compteur: 128px;
   --t-champ: 240px;
   --t-champ-seuil: 90px;
-  --t-champ-demande: 380px;
-  --t-champ-demande-h: 96px;
-  --t-pilule-demande: 220px;
   --contour-choisi: 1.5px;
   --t-nom-part: 112px;
   --t-valeur-part: 40px;
@@ -235,6 +232,18 @@
   --f-engagement: 600 44px/1 var(--police);
   --delai-survol: 300ms;
   --delai-fermeture: 150ms;
+  --t-filtres: 280px;
+  --t-ligne-facette: 20px;
+  --t-popover-mots: 420px;
+  --t-liste-mots: 240px;
+  --t-fils: 232px;
+  --t-chat: 780px;
+  --t-chat-accueil: 520px;
+  --t-bulle-moi: 80%;
+  --t-saisie-max: 168px;
+  --t-avatar-claude: 24px;
+  --t-avatar-claude-grand: 52px;
+  --retrait-reponse: calc(var(--t-avatar-claude) + var(--e-m));
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,55 +1,333 @@
-// Veille : les vidéos qui montent sur les mots-clés suivis. La page ne défile pas, ses colonnes défilent.
-// Tout se lit par la commande `veille` (src/ecrans/veille.rs) ; ce module n'affiche que ce qu'elle rend. Le survol
-// d'une vidéo montre sa carte, le clic ouvre sa fiche (veille/fiche.js). « Demander à Claude » lance `demander_veille` ;
-// la dernière demande a sa pilule au bout des mots-clés, qui ouvre ses vidéos retenues.
+// Veille : la bank des vidéos trouvées, et la conversation avec Claude qui l'enrichit. La page ne défile pas, ses
+// colonnes défilent. Tout se lit par `veille` et `chat_veille` (src/ecrans/veille.rs) ; ce module n'affiche que ce
+// qu'elles rendent.
+// Bank : la grille à gauche, les filtres à droite ; le survol d'une vidéo montre sa carte, le clic ouvre sa fiche
+// (veille/fiche.js). Les mots-clés qui nourrissent la bank s'ouvrent dans un popover.
+// Claude : les conversations à gauche, celle ouverte à droite ; chaque message lance `demander_veille`.
 
-import { enTetePanneau, h, icone, pilule, rendu, segmente, surtitre, vide } from "../composants.js";
+import { enTetePanneau, h, icone, pilule, point, rendu, segmente, surtitre, vide } from "../composants.js";
+import * as F from "../format.js";
 import { bouton, caseVideo, choixBusiness, menuContextuel, popover, remplacer } from "./videos/commun.js";
 import { ouvrirFiche, recalerCarte, survolCarte } from "./veille/fiche.js";
 
+const VUES = [
+  { id: "bank", libelle: "Bank" },
+  { id: "claude", libelle: "Claude" },
+];
 const TRIS = [
   { id: "ratio", libelle: "× médiane" },
   { id: "vues", libelle: "Vues" },
   { id: "vitesse", libelle: "Vues/h" },
+  { id: "engagement", libelle: "Engagement" },
   { id: "recentes", libelle: "Récentes" },
+  { id: "ajoutees", libelle: "Ajoutées" },
+];
+const EXEMPLES = [
+  "Trouve des vidéos scriptées qui font la promo d'une app d'apprentissage",
+  "Les sketchs sur l'apprentissage de l'espagnol qui ont percé ce mois-ci",
+  "Des hooks visuels forts sur les langues, publiés il y a moins d'un an",
 ];
 const SEUIL = 20000;
+// vidéos chargées à la fois, la grille en demande d'autres en approchant du bas
+const PAGE = 120;
+const OPTIONS_VISIBLES = 8;
+const ATTENTE_RECHERCHE = 250;
+// en deçà, la conversation est « en bas » et y reste quand un message arrive
+const PRES_DU_BAS = 80;
 
-const INITIAL = { tri: "ratio", plateforme: null, outliers: true, mot: null, vue: "grille" };
-const etat = { ...INITIAL };
+const INITIAL = { vue: "bank", tri: "ratio", choix: {}, recherche: "", limite: PAGE, fil: null };
+let etat = { ...INITIAL };
 let dernier = null;
+let tour = 0;
+// la dernière lecture de la bank : le popover des mots-clés s'en sert
+let bank = null;
+// les facettes dépliées et les étapes ouvertes, d'un rendu à l'autre
+const ouvertes = new Set();
+const depliees = new Set();
+// les cases déjà faites, par vue et par vidéo : une vidéo inchangée garde sa case (et sa miniature chargée)
+let cases = new Map();
+let observateur = null;
+let haut = false;
+let bas = false;
+let businessNouveau = null;
 
-function maj(changement) {
+function maj(changement = {}) {
   Object.assign(etat, changement);
   rendu.calme = true;
   return ecran.rendre(dernier.racine, { ...dernier.ctx, rafraichi: true });
 }
 
-// mots-clés
-
-function piluleMot(m, ctx) {
-  const el = h(
-    "button",
-    { class: "pilule-mot" + (m.mot === etat.mot ? " choisie" : "") + (m.actif ? "" : " en-pause"), title: m.aide, onclick: () => maj({ mot: etat.mot === m.mot ? null : m.mot }) },
-    h("span", null, m.mot),
-    h("span", { class: "nombre" }, m.outliers),
-  );
-  return menuContextuel(el, [
-    { libelle: m.actif ? "Mettre en pause" : "Reprendre", faire: () => ctx.appeler("activer_mot", { business: m.business, mot: m.mot, actif: !m.actif }) },
-    null,
-    {
-      libelle: "Retirer",
-      danger: true,
-      faire: () => {
-        if (etat.mot === m.mot) etat.mot = null;
-        return ctx.appeler("retirer_mot", { business: m.business, mot: m.mot });
-      },
-    },
-  ]);
+/** Un filtre, un tri ou une recherche change : la grille repart du haut. */
+function filtrer(changement) {
+  haut = true;
+  return maj({ ...changement, limite: PAGE });
 }
 
-/** Le formulaire de la pilule + : le mot, le seuil de vues, le business. */
-function formulaireMot(ctx, fermer) {
+// champs gardés d'un rendu à l'autre : la saisie en cours, son focus et sa sélection survivent au rafraîchissement
+
+let attente = null;
+const recherche = h("input", {
+  class: "champ-recherche",
+  type: "search",
+  placeholder: "Légende, compte, app, hook…",
+  spellcheck: false,
+  oninput: () => {
+    clearTimeout(attente);
+    attente = setTimeout(() => filtrer({ recherche: recherche.value.trim() }), ATTENTE_RECHERCHE);
+  },
+  onkeydown: (e) => {
+    if (e.key !== "Escape" || !recherche.value) return;
+    e.stopPropagation();
+    viderRecherche();
+  },
+});
+
+function viderRecherche() {
+  clearTimeout(attente);
+  recherche.value = "";
+  return filtrer({ recherche: "" });
+}
+
+const saisie = h("textarea", {
+  class: "saisie-chat",
+  rows: 1,
+  placeholder: "Demande des vidéos à Claude",
+  oninput: () => ajuster(),
+  onkeydown: (e) => {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+    e.preventDefault();
+    envoyer();
+  },
+});
+
+/** La saisie grandit avec son texte, jusqu'à sa hauteur maximale (CSS). */
+function ajuster() {
+  saisie.style.height = "auto";
+  saisie.style.height = saisie.scrollHeight + "px";
+}
+
+/** Remplace la page sans perdre le champ en cours de saisie. */
+function poser(racine, ...enfants) {
+  const actif = document.activeElement;
+  const garde = actif === recherche || actif === saisie ? { el: actif, debut: actif.selectionStart, fin: actif.selectionEnd } : null;
+  remplacer(racine, ...enfants);
+  if (garde?.el.isConnected) {
+    garde.el.focus({ preventScroll: true });
+    garde.el.setSelectionRange(garde.debut, garde.fin);
+  }
+}
+
+// cases
+
+/** Une vidéo : le survol montre sa carte, un clic ouvre sa fiche ; refaite seulement si elle a changé. */
+function caseGrille(v, ctx, { portee, legende, lignes, faites }) {
+  const cle = `${portee}|${v.id}`;
+  const signature = JSON.stringify([v, legende]);
+  faites.set(cle, cases.get(cle)?.signature === signature ? cases.get(cle) : { signature, el: nouvelleCase(v, ctx, legende, lignes) });
+  return faites.get(cle).el;
+}
+
+function nouvelleCase(v, ctx, legende, lignes) {
+  const el = caseVideo({
+    cles: v.cles,
+    plateforme: v.plateforme,
+    vues: v.vues,
+    badge: v.badge,
+    badgeCouleur: v.outlier ? "var(--succes)" : "var(--texte)",
+    legende,
+    lignes,
+    clic: () => ouvrirFiche(v.id, ctx),
+  });
+  if (v.app) el.querySelector(".legende").before(h("span", { class: "app-case", title: "L'app promue" }, v.app));
+  survolCarte(el.querySelector(".affiche"), v);
+  return menuContextuel(el, [{ libelle: `Ouvrir sur ${v.nomPlateforme}`, faire: () => ctx.lien(v.url) }]);
+}
+
+// bank
+
+function compteur(d) {
+  return h(
+    "div",
+    { class: "compteur-bank" },
+    h("span", { class: "total" }, F.entier(d.total)),
+    d.total > 1 ? " vidéos" : " vidéo",
+    d.total !== d.bank && h("span", { class: "sur" }, ` sur ${F.entier(d.bank)}`),
+  );
+}
+
+/** Les choix avec `valeurs` pour le filtre `cle` ; une liste vide retire le filtre. */
+function avecChoix(cle, valeurs) {
+  const choix = { ...etat.choix, [cle]: valeurs };
+  if (valeurs.length === 0) delete choix[cle];
+  return choix;
+}
+
+function jetons(d) {
+  const retirer = (cle, valeur) => filtrer({ choix: avecChoix(cle, (etat.choix[cle] ?? []).filter((x) => x !== valeur)) });
+  const jeton = (libelle, faire) => h("button", { class: "jeton-filtre", title: "Retirer ce filtre", onclick: faire }, libelle, icone("fermer"));
+  if (d.actifs.length === 0 && !etat.recherche) return null;
+  return h(
+    "div",
+    { class: "marge jetons" },
+    etat.recherche && jeton(`« ${etat.recherche} »`, viderRecherche),
+    d.actifs.map((a) => jeton(a.libelle, () => retirer(a.cle, a.valeur))),
+    h(
+      "button",
+      {
+        class: "lien-filtre",
+        onclick: () => {
+          clearTimeout(attente);
+          recherche.value = "";
+          return filtrer({ choix: {}, recherche: "" });
+        },
+      },
+      "Tout effacer",
+    ),
+  );
+}
+
+function panneauGrille(d, ctx, faites) {
+  const defile = h("div", { class: "defile", "data-defile": "bank" });
+  if (d.videos.length === 0) {
+    defile.append(vide(d.bank === 0 ? "La bank est vide : ajoute un mot-clé ou demande des vidéos à Claude." : "Aucune vidéo pour ces filtres."));
+  } else {
+    defile.append(h("div", { class: "grille-videos" }, d.videos.map((v) => caseGrille(v, ctx, { portee: "bank", legende: v.legende, lignes: 1, faites }))));
+  }
+  observateur?.disconnect();
+  if (d.suite) {
+    const sentinelle = h("div", { class: "sentinelle" });
+    defile.append(sentinelle);
+    observateur = new IntersectionObserver(
+      (entrees) => {
+        if (!entrees.some((e) => e.isIntersecting)) return;
+        observateur.disconnect();
+        maj({ limite: etat.limite + PAGE });
+      },
+      { root: defile, rootMargin: "0px 0px 100% 0px" },
+    );
+    observateur.observe(sentinelle);
+  }
+  return h(
+    "section",
+    { class: "panneau-videos verre" },
+    h("div", { class: "marge" }, enTetePanneau(compteur(d), segmente(TRIS, etat.tri, (id) => filtrer({ tri: id })))),
+    jetons(d),
+    defile,
+  );
+}
+
+function basculer(f, o) {
+  const actuels = etat.choix[f.cle] ?? [];
+  const valeurs = o.choisi ? actuels.filter((x) => x !== o.valeur) : f.unique ? [o.valeur] : [...actuels, o.valeur];
+  return filtrer({ choix: avecChoix(f.cle, valeurs) });
+}
+
+/** Un filtre du panneau : ses options en puces, chacune avec les vidéos qu'elle donnerait. */
+function facette(f) {
+  const ouverte = ouvertes.has(f.cle);
+  const visibles = ouverte ? f.options : f.options.filter((o, i) => i < OPTIONS_VISIBLES || o.choisi);
+  const choisies = f.options.some((o) => o.choisi);
+  const el = h(
+    "section",
+    { class: "facette" },
+    h(
+      "div",
+      { class: "tete-facette" },
+      surtitre(f.titre),
+      choisies && h("button", { class: "lien-filtre", onclick: () => filtrer({ choix: avecChoix(f.cle, []) }) }, "Effacer"),
+    ),
+    h(
+      "div",
+      { class: "options" + (f.unique ? " unique" : "") },
+      visibles.map((o) =>
+        h(
+          "button",
+          { class: "option" + (o.choisi ? " choisie" : ""), disabled: o.n === 0 && !o.choisi, onclick: () => basculer(f, o) },
+          h("span", { class: "libelle" }, o.libelle),
+          h("span", { class: "n" }, F.compact(o.n)),
+        ),
+      ),
+    ),
+    f.options.length > OPTIONS_VISIBLES &&
+      h(
+        "button",
+        {
+          class: "lien-filtre",
+          onclick: () => {
+            if (ouverte) ouvertes.delete(f.cle);
+            else ouvertes.add(f.cle);
+            el.replaceWith(facette(f));
+          },
+        },
+        ouverte ? "Moins" : `Tout voir (${f.options.length})`,
+      ),
+  );
+  return el;
+}
+
+function panneauFiltres(d) {
+  return h(
+    "aside",
+    { class: "panneau-filtres verre" },
+    h(
+      "label",
+      { class: "recherche-bank" },
+      icone("loupe"),
+      recherche,
+      etat.recherche && h("button", { class: "vider", title: "Effacer la recherche", onclick: viderRecherche }, icone("fermer")),
+    ),
+    h("div", { class: "defile", "data-defile": "filtres" }, d.facettes.map(facette)),
+  );
+}
+
+// mots-clés
+
+// la liste du popover ouvert, et de quoi le fermer
+let mots = null;
+
+/** Le popover des mots-clés : la liste, l'ajout, le curseur ; la liste se relit à chaque rendu de la bank. */
+function popoverMots(ancre, ctx) {
+  popover(ancre, (fermer) => {
+    mots = { liste: h("div", { class: "liste-mots" }), fermer };
+    remplirMots(ctx);
+    return h(
+      "div",
+      { class: "popover-mots" },
+      h("div", { class: "titre-popover" }, "Mots-clés"),
+      h("div", { class: "note" }, "Ce que la veille cherche sur TikTok et Instagram toutes les 6 h ; les vidéos trouvées restent dans la bank."),
+      mots.liste,
+      formulaireMot(ctx),
+      curseur(bank.curseur, ctx),
+    );
+  });
+}
+
+function remplirMots(ctx) {
+  mots?.liste.replaceChildren(...(bank.mots.length ? bank.mots.map((m) => ligneMot(m, ctx)) : [h("div", { class: "attente" }, "Aucun mot-clé.")]));
+}
+
+function ligneMot(m, ctx) {
+  const cle = { business: m.business, mot: m.mot };
+  const voir = () => {
+    mots.fermer();
+    return filtrer({ choix: { source: [`mot:${m.mot}`] } });
+  };
+  return h(
+    "div",
+    { class: "ligne-mot" + (m.actif ? "" : " en-pause"), title: m.aide },
+    h("button", { class: "mot", title: "Voir ses vidéos dans la bank", onclick: voir }, m.mot),
+    h("span", { class: "n" }, F.entier(m.videos)),
+    h(
+      "button",
+      { class: "action-mot", title: m.actif ? "Mettre en pause" : "Reprendre", onclick: () => ctx.appeler("activer_mot", { ...cle, actif: !m.actif }) },
+      icone(m.actif ? "pause" : "lecture"),
+    ),
+    h("button", { class: "action-mot danger", title: "Retirer", onclick: () => ctx.appeler("retirer_mot", cle) }, icone("fermer")),
+  );
+}
+
+/** L'ajout d'un mot-clé : le mot, le seuil de vues, le business ; le popover reste ouvert pour en ajouter d'autres. */
+function formulaireMot(ctx) {
   let business = ctx.business ?? ctx.businesses[0]?.id;
   const ajouterBouton = bouton("Ajouter", () => ajouter());
   const pret = () => champ.value.trim() !== "" && business != null;
@@ -64,153 +342,14 @@ function formulaireMot(ctx, fermer) {
   async function ajouter() {
     if (!pret()) return;
     await ctx.appeler("ajouter_mot", { business, mot: champ.value, vuesMin: Math.round(Number(seuil.value) || 0) });
-    fermer();
+    champ.value = "";
+    ajouterBouton.disabled = true;
   }
   return h(
     "div",
     { class: "formulaire-ajout" },
-    h("div", { class: "h2" }, "Ajouter un mot-clé"),
-    h("div", { class: "champs" }, champ, seuil),
+    h("div", { class: "champs" }, champ, seuil, ajouterBouton),
     choixBusiness(ctx, business, (id) => (business = id)),
-    h("div", { class: "pied" }, h("span", { class: "note" }, "TikTok et Instagram, toutes les 6 h."), ajouterBouton),
-  );
-}
-
-function rangeeMots(d, ctx) {
-  const ajout = h(
-    "button",
-    { class: "pilule-mot ajout", onclick: () => popover(ajout, (fermer) => formulaireMot(ctx, fermer)) },
-    h("span", { class: "plus" }, "+"),
-    "Mot-clé",
-  );
-  return h("div", { class: "rangee-mots" }, d.mots.map((m) => piluleMot(m, ctx)), ajout, d.demande && piluleDemande(d.demande));
-}
-
-// demande à Claude
-
-function piluleDemande(dm) {
-  const ouverte = etat.vue === "demande";
-  return h(
-    "button",
-    {
-      class: "pilule-mot demande" + (ouverte ? " choisie" : "") + (dm.etat === "en_cours" ? " tourne" : ""),
-      title: dm.prompt,
-      onclick: () => maj({ vue: ouverte ? "grille" : "demande" }),
-    },
-    icone(dm.etat === "en_cours" ? "relancer" : "loupe"),
-    h("span", { class: "libelle" }, dm.prompt),
-    dm.etat === "finie" && h("span", { class: "nombre" }, dm.retenues.length),
-  );
-}
-
-/** Le formulaire de « Demander à Claude » : la consigne, le business. */
-function formulaireDemande(d, ctx, fermer) {
-  let business = ctx.business ?? ctx.businesses[0]?.id;
-  const demanderBouton = bouton("Demander", () => demander());
-  const pret = () => champ.value.trim() !== "" && business != null;
-  const champ = h("textarea", {
-    class: "champ-ajout demande",
-    maxlength: d.promptMax,
-    placeholder: "Trouve des vidéos scriptées qui font la promo d'une app d'apprentissage",
-    oninput: () => (demanderBouton.disabled = !pret()),
-    onkeydown: (e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && demander(),
-  });
-  demanderBouton.disabled = true;
-  async function demander() {
-    if (!pret()) return;
-    await ctx.appeler("demander_veille", { business, prompt: champ.value });
-    fermer();
-    maj({ vue: "demande" });
-  }
-  return h(
-    "div",
-    { class: "formulaire-ajout" },
-    h("div", { class: "h2" }, "Demander à Claude"),
-    champ,
-    choixBusiness(ctx, business, (id) => (business = id)),
-    h("div", { class: "pied" }, h("span", { class: "note" }, "Sonnet choisit les mots-clés, Haiku cherche, analyse et retient. Quelques minutes, quelques centimes."), demanderBouton),
-  );
-}
-
-function panneauDemande(d, ctx) {
-  const dm = d.demande;
-  const enCours = dm.etat === "en_cours";
-  return h(
-    "section",
-    { class: "panneau-videos verre panneau-demande" },
-    h("div", { class: "marge" }, enTetePanneau("Demande à Claude", pilule("Fermer", () => maj({ vue: "grille" }), { icone: "fermer" }))),
-    h(
-      "div",
-      { class: "marge resume-demande" },
-      h("div", { class: "consigne" }, dm.prompt),
-      h("div", { class: "note" }, dm.meta),
-      enCours && h("span", { class: "passage tourne" }, icone("relancer"), dm.journal.at(-1) ?? "Démarrage"),
-      dm.synthese && h("div", { class: "synthese" }, dm.synthese),
-      dm.erreur && h("div", { class: "erreur" }, dm.erreur),
-    ),
-    h(
-      "div",
-      { class: "defile", "data-defile": "demande" },
-      dm.retenues.length === 0
-        ? vide(enCours ? "Les vidéos retenues arrivent ici." : "Aucune vidéo retenue.")
-        : h(
-            "div",
-            { class: "grille-videos" },
-            dm.retenues.map(({ case: v, raison }) => caseGrille(v, ctx, { legende: raison, lignes: 3 })),
-          ),
-      dm.journal.length > 0 && h("div", { class: "journal-demande" }, surtitre("Journal"), dm.journal.map((l) => h("div", { class: "ligne" }, l))),
-    ),
-  );
-}
-
-// vidéos
-
-/** Une vidéo de la grille ou des retenues : le survol montre sa carte, un clic ouvre sa fiche. */
-function caseGrille(v, ctx, { legende, lignes }) {
-  const el = caseVideo({
-    cles: v.cles,
-    plateforme: v.plateforme,
-    vues: v.vues,
-    badge: v.badge,
-    badgeCouleur: v.outlier ? "var(--succes)" : "var(--texte)",
-    legende,
-    lignes,
-    clic: () => ouvrirFiche(v.id, ctx),
-  });
-  survolCarte(el.querySelector(".affiche"), v);
-  return menuContextuel(el, [{ libelle: `Ouvrir sur ${v.nomPlateforme}`, faire: () => ctx.lien(v.url) }]);
-}
-
-function panneauVeille(d, ctx) {
-  return h(
-    "section",
-    { class: "panneau-videos verre" },
-    h("div", { class: "marge" }, enTetePanneau("Ce qui a marché", segmente(TRIS, etat.tri, (id) => maj({ tri: id })))),
-    h(
-      "div",
-      { class: "marge filtres" },
-      segmente([{ id: null, libelle: "Toutes" }, ...d.plateformes], d.plateforme, (id) => maj({ plateforme: id })),
-      h("span", { class: "espace" }),
-      segmente(
-        [
-          { id: true, libelle: "Outliers" },
-          { id: false, libelle: "Tout" },
-        ],
-        etat.outliers,
-        (id) => maj({ outliers: id }),
-      ),
-    ),
-    d.videos.length === 0
-      ? vide(d.sansMot ? "Ajouter un mot-clé avec la pilule +." : "Aucune vidéo pour ce filtre.")
-      : h(
-          "div",
-          { class: "defile", "data-defile": "veille" },
-          h(
-            "div",
-            { class: "grille-videos" },
-            d.videos.map((v) => caseGrille(v, ctx, { legende: v.legende, lignes: 1 })),
-          ),
-        ),
   );
 }
 
@@ -234,28 +373,232 @@ function curseur(c, ctx) {
   return h("label", { class: "curseur", title: "Vidéos gardées par mot-clé et par plateforme à chaque passage, les plus récentes d'abord" }, "Vidéos par mot-clé", champ, valeur);
 }
 
-function outils(d, ctx) {
+// Claude
+
+const ICONES_ETAPES = { pense: "etincelle", mots: "etiquette", cherche: "loupe", trouve: "videos", image: "image", analyse: "veille", retenue: "coche", echec: "alerte", info: "info" };
+
+function listeFils(d) {
+  return h(
+    "aside",
+    { class: "panneau-fils verre" },
+    h("button", { class: "nouveau-fil" + (d.fil == null ? " choisi" : ""), onclick: () => ouvrirFil(null) }, icone("plus"), "Nouvelle conversation"),
+    h(
+      "div",
+      { class: "defile", "data-defile": "fils" },
+      d.fils.length === 0
+        ? h("div", { class: "attente" }, "Tes conversations avec Claude restent ici.")
+        : d.fils.map((f) =>
+            h(
+              "button",
+              { class: "fil" + (f.id === d.fil ? " choisi" : ""), title: f.titre, onclick: () => ouvrirFil(f.id) },
+              h("span", { class: "titre" }, f.titre),
+              h(
+                "span",
+                { class: "meta" },
+                f.etat === "en_cours" && point("var(--accent)", { mini: true, enCours: true, aide: "Claude cherche" }),
+                f.etat === "echouee" && point("var(--danger)", { mini: true, aide: "Échouée" }),
+                f.meta,
+              ),
+            ),
+          ),
+    ),
+  );
+}
+
+function ouvrirFil(fil) {
+  bas = true;
+  return maj({ fil });
+}
+
+function ligneEtape(e) {
+  return h("div", { class: "etape " + e.genre }, icone(ICONES_ETAPES[e.genre] ?? "info"), h("span", { class: "texte" }, e.texte));
+}
+
+/** Le journal d'une demande : l'étape en cours en clair, les autres repliées. */
+function etapes(dm) {
+  const enCours = dm.etat === "en_cours";
+  const passees = enCours ? dm.etapes.slice(0, -1) : dm.etapes;
+  const courante = enCours ? (dm.etapes.at(-1)?.texte ?? "Démarrage") : null;
+  const ouvert = depliees.has(dm.id);
+  const el = h(
+    "div",
+    { class: "etapes" },
+    passees.length > 0 &&
+      h(
+        "button",
+        {
+          class: "bascule-etapes" + (ouvert ? " ouvert" : ""),
+          onclick: () => {
+            if (ouvert) depliees.delete(dm.id);
+            else depliees.add(dm.id);
+            el.replaceWith(etapes(dm));
+          },
+        },
+        icone("chevron"),
+        `${passees.length} étape${passees.length > 1 ? "s" : ""}`,
+      ),
+    ouvert && h("div", { class: "liste-etapes" }, passees.map(ligneEtape)),
+    courante && h("div", { class: "etape courante tourne" }, icone("relancer"), h("span", { class: "texte" }, courante)),
+  );
+  return el;
+}
+
+function echange(dm, ctx, faites) {
+  const n = dm.retenues.length;
+  return h(
+    "div",
+    { class: "echange", "data-demande": dm.id },
+    h("div", { class: "bulle-moi" }, dm.prompt),
+    h(
+      "div",
+      { class: "reponse" },
+      h("div", { class: "auteur" }, h("span", { class: "avatar-claude" }, icone("etincelle")), "Claude", h("span", { class: "meta" }, dm.meta)),
+      etapes(dm),
+      dm.synthese && h("div", { class: "synthese" }, dm.synthese),
+      n > 0 &&
+        h(
+          "div",
+          { class: "retenues" },
+          surtitre(`${n} vidéo${n > 1 ? "s" : ""} gardée${n > 1 ? "s" : ""} dans la bank`),
+          h("div", { class: "grille-videos" }, dm.retenues.map(({ case: v, raison }) => caseGrille(v, ctx, { portee: dm.id, legende: raison, lignes: 3, faites }))),
+        ),
+      dm.etat === "finie" && n === 0 && !dm.synthese && h("div", { class: "attente" }, "Aucune vidéo retenue."),
+      dm.erreur && h("div", { class: "erreur" }, dm.erreur),
+    ),
+  );
+}
+
+function accueilChat() {
+  return h(
+    "div",
+    { class: "accueil-chat" },
+    h("span", { class: "avatar-claude grand" }, icone("etincelle")),
+    h("div", { class: "h2" }, "Quelles vidéos cherches-tu ?"),
+    h("div", { class: "note" }, "Sonnet choisit les mots-clés, Haiku cherche sur TikTok et Instagram, analyse et garde les meilleures dans la bank. Quelques minutes, quelques centimes."),
+    h(
+      "div",
+      { class: "exemples" },
+      EXEMPLES.map((t) =>
+        h(
+          "button",
+          {
+            class: "exemple survolable",
+            onclick: () => {
+              saisie.value = t;
+              ajuster();
+              saisie.focus();
+            },
+          },
+          t,
+        ),
+      ),
+    ),
+  );
+}
+
+let chat = null;
+
+async function envoyer() {
+  const { d, ctx } = chat ?? {};
+  const prompt = saisie.value.trim();
+  if (!d || !prompt || d.occupe) return;
+  const business = d.business ?? businessNouveau ?? ctx.business ?? ctx.businesses[0]?.id;
+  const fil = await ctx.appeler("demander_veille", { business, prompt, fil: d.fil });
+  saisie.value = "";
+  ajuster();
+  return ouvrirFil(fil);
+}
+
+function barreSaisie(d, ctx) {
+  saisie.maxLength = d.promptMax;
+  saisie.placeholder = d.fil ? "Demande la suite à Claude" : "Demande des vidéos à Claude";
+  if (d.fil == null) businessNouveau ??= ctx.business ?? ctx.businesses[0]?.id;
+  return h(
+    "div",
+    { class: "barre-saisie" },
+    h(
+      "div",
+      { class: "cadre-saisie" },
+      saisie,
+      h(
+        "div",
+        { class: "pied-saisie" },
+        d.fil == null && choixBusiness(ctx, businessNouveau, (id) => (businessNouveau = id)),
+        h("span", { class: "note" }, d.occupe ? "La veille tourne : envoie quand elle a fini." : "Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne"),
+        h("button", { class: "envoyer", title: "Envoyer", disabled: d.occupe, onclick: envoyer }, icone("envoyer")),
+      ),
+    ),
+  );
+}
+
+function vueClaude(d, ctx, faites) {
+  const fil = h("div", { class: "defile fil-chat", "data-defile": "chat" }, d.demandes.length === 0 ? accueilChat() : h("div", { class: "messages" }, d.demandes.map((dm) => echange(dm, ctx, faites))));
+  return h("div", { class: "veille-chat remplit" }, listeFils(d), h("section", { class: "panneau-chat verre" }, fil, barreSaisie(d, ctx)));
+}
+
+// page
+
+function outils(ctx) {
+  const vues = segmente(VUES, etat.vue, (id) => {
+    bas = id === "claude";
+    return maj({ vue: id });
+  });
+  const ouvrirMots = (e) => popoverMots(e.currentTarget, ctx);
   const lancer = ctx.enCours.includes("veille")
-    ? h("span", { class: "passage tourne" }, icone("relancer"), "Passage en cours")
+    ? h("span", { class: "passage tourne" }, icone("relancer"), "Veille en cours")
     : pilule("Lancer maintenant", () => ctx.appeler("relancer", { source: "veille" }), { icone: "relancer" });
-  const demander = pilule("Demander à Claude", () => popover(demander, (fermer) => formulaireDemande(d, ctx, fermer)), { icone: "loupe", aide: "Claude cherche et rapporte les vidéos qui répondent à ta consigne" });
-  return [curseur(d.curseur, ctx), demander, lancer];
+  return [
+    vues,
+    etat.vue === "bank" && pilule(["Mots-clés", h("span", { class: "nombre-pilule" }, bank.mots.length)], ouvrirMots, { icone: "etiquette", aide: "Les mots-clés qui nourrissent la bank" }),
+    lancer,
+  ].filter(Boolean);
 }
 
 const ecran = {
   titre: "Veille",
-  sousTitre: "Aucun mot-clé",
+  sousTitre: "La bank",
   defile: false,
   async rendre(racine, ctx) {
-    if (!ctx.rafraichi) Object.assign(etat, INITIAL);
+    if (!ctx.rafraichi) {
+      etat = { ...INITIAL };
+      cases = new Map();
+      ouvertes.clear();
+      recherche.value = "";
+      businessNouveau = null;
+    }
     dernier = { racine, ctx };
-    const d = await ctx.appeler("veille", { business: ctx.business, tri: etat.tri, plateforme: etat.plateforme, outliers: etat.outliers, mot: etat.mot });
-    ctx.page.sousTitre(d.sousTitre);
-    ctx.page.outils(...outils(d, ctx));
-    if (!d.demande) etat.vue = "grille";
-    const panneau = etat.vue === "demande" ? panneauDemande(d, ctx) : panneauVeille(d, ctx);
-    panneau.classList.add("remplit");
-    remplacer(racine, rangeeMots(d, ctx), panneau);
+    const n = ++tour;
+    // la bank se lit toujours : le compte des mots-clés et leur popover s'en servent
+    const d = await ctx.appeler("veille", { business: ctx.business, choix: etat.choix, recherche: etat.recherche, tri: etat.tri, limite: etat.limite });
+    const c = etat.vue === "claude" ? await ctx.appeler("chat_veille", { business: ctx.business, fil: etat.fil }) : null;
+    if (n !== tour) return;
+    bank = d;
+    if (mots?.liste.isConnected) remplirMots(ctx);
+    else mots = null;
+    const faites = new Map();
+    let vue;
+    if (c) {
+      chat = { d: c, ctx };
+      if (c.fil !== etat.fil) etat.fil = c.fil;
+      ctx.page.sousTitre(c.fils.length ? F.nombre(c.fils.length, "conversation") : "Aucune conversation");
+      const ancien = racine.querySelector("[data-defile=chat]");
+      const enBas = !ancien || ancien.scrollHeight - ancien.scrollTop - ancien.clientHeight < PRES_DU_BAS;
+      vue = vueClaude(c, ctx, faites);
+      ctx.page.outils(...outils(ctx));
+      poser(racine, vue);
+      ajuster();
+      const fil = racine.querySelector("[data-defile=chat]");
+      if (bas || enBas) fil.scrollTop = fil.scrollHeight;
+    } else {
+      chat = null;
+      ctx.page.sousTitre(d.sousTitre);
+      vue = h("div", { class: "veille-bank remplit" }, panneauGrille(d, ctx, faites), panneauFiltres(d));
+      ctx.page.outils(...outils(ctx));
+      poser(racine, vue);
+      if (haut) racine.querySelector("[data-defile=bank]").scrollTop = 0;
+    }
+    cases = faites;
+    haut = bas = false;
     recalerCarte();
   },
 };

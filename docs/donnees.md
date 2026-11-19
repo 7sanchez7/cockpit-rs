@@ -295,6 +295,8 @@ Retirer un mot supprime sa ligne seulement : ses vidéos restent.
 | `mot` | le premier mot qui l'a trouvée |
 | `media` | URL du fichier vidéo quand la page l'a donnée, expire en quelques heures |
 | `trouvee` | premier passage qui l'a vue (`trouvaille`) |
+| `app`, `langue`, `genre` | le classement de Claude ([`sources/veille.md`](sources/veille.md) § Le classement) : l'app promue si elle est clairement nommée (vide sinon), le code de langue (`LANGUES` ou `inconnue`), l'un des `GENRES` |
+| `classee` | ISO UTC du classement (`classer_video`) ; nulle = à classer, une nouvelle analyse la remet à nulle |
 
 | `veille_releve` | Contenu |
 |---|---|
@@ -309,7 +311,7 @@ Retirer un mot supprime sa ligne seulement : ses vidéos restent.
 
 | `veille_cout` | Contenu |
 |---|---|
-| `video`, `at`, `modele` | un appel Claude, réussi ou non (`cout_veille`) ; `video` vaut `demande:<id>` pour les appels d'une demande à Claude (mots-clés de Sonnet, tours de Haiku) |
+| `video`, `at`, `modele` | un appel Claude, réussi ou non (`cout_veille`) ; `video` vaut `demande:<id>` pour les appels d'une demande à Claude (mots-clés de Sonnet, tours de Haiku), `classement` pour ceux du classement |
 | `entree`, `sortie` | tokens facturés ; `entree` compte tout le prompt, cache écrit et lu compris |
 | `usd` | coût de l'appel, au prix de chaque sorte de token (`Usage::usd`) ; `depense_veille_usd` en fait la somme |
 
@@ -323,6 +325,7 @@ Une demande à Claude depuis l'écran Veille ([`sources/veille.md`](sources/veil
 | `etat` | `en_cours`, `finie` ou `echouee` ; créer une demande passe celle restée `en_cours` en `echouee`, erreur « interrompue » (`nouvelle_demande`) |
 | `journal` | tableau JSON de lignes, une par étape (`noter_demande`) |
 | `synthese`, `erreur` | la synthèse de Haiku, ou ce qui l'a arrêtée (`finir_demande`) |
+| `fil` | l'id de la première demande de sa conversation ; nul pour les demandes d'avant les conversations, lues comme `coalesce(fil, id)` |
 
 | `veille_retenue` | Contenu |
 |---|---|

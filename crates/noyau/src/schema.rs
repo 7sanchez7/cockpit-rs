@@ -2,7 +2,16 @@
 //! Pas de migrations : `create … if not exists`, une colonne nouvelle s'ajoute par `COLONNES`, avec une valeur par défaut.
 
 /// Colonnes ajoutées après coup à une table existante : (table, colonne, définition).
-pub const COLONNES: [(&str, &str, &str); 1] = [("video", "plateforme", "text not null default 'tiktok'")];
+pub const COLONNES: [(&str, &str, &str); 6] = [
+    ("video", "plateforme", "text not null default 'tiktok'"),
+    // le classement de la veille (docs/donnees.md § Veille) ; `classee` vide = à classer
+    ("veille_video", "app", "text"),
+    ("veille_video", "langue", "text"),
+    ("veille_video", "genre", "text"),
+    ("veille_video", "classee", "text"),
+    // la conversation d'une demande à Claude : l'id de sa première demande
+    ("veille_demande", "fil", "text"),
+];
 
 pub const SQL: &str = r#"
 create table if not exists business (

@@ -171,6 +171,15 @@ const ICONES = {
   sante: ["path d=M3,12h4l3-8,4,16,3-8h4"],
   aTraiter: ["path d=M3,13h5l2,3h4l2-3h5", "path d=M5,5h14l2,8v6H3v-6Z"],
   apps: ["rect x=4 y=4 width=7 height=7 rx=2", "rect x=13 y=4 width=7 height=7 rx=2", "rect x=4 y=13 width=7 height=7 rx=2", "rect x=13 y=13 width=7 height=7 rx=2"],
+  etincelle: ["path d=M12,3l1.9,5.1L19,10l-5.1,1.9L12,17l-1.9-5.1L5,10l5.1-1.9Z", "path d=M19,15l.8,2.2L22,18l-2.2.8L19,21l-.8-2.2L16,18l2.2-.8Z"],
+  coche: ["path d=M5,12.5l4.5,4.5L19,7.5"],
+  alerte: ["path d=M12,3L22,20H2Z", "path d=M12,10v4", "path d=M12,17v.5"],
+  image: ["rect x=3 y=5 width=18 height=14 rx=3", "circle cx=9 cy=10 r=1.5", "path d=M21,16l-5-5-8,8"],
+  etiquette: ["path d=M3,12V4a1,1,0,0,1,1-1h8l9,9-9,9Z", "circle cx=8 cy=8 r=1.5"],
+  chevron: ["path d=M9,6l6,6-6,6"],
+  envoyer: ["path d=M12,19V5", "path d=M6,11l6-6,6,6"],
+  info: ["circle cx=12 cy=12 r=9", "path d=M12,11v5", "path d=M12,8v.5"],
+  plus: ["path d=M12,5v14M5,12h14"],
 };
 
 export function icone(nom) {

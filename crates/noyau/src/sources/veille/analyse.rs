@@ -100,14 +100,19 @@ pub fn videos() -> PathBuf { crate::chemins::cache().join("veille-videos") }
 pub async fn fichier(v: &VideoVeille, http: &Http) -> Res<PathBuf> {
     let f = videos().join(format!("{}.mp4", v.id.replace(':', "_")));
     if f.exists() {
-        return Ok(f);
+        let mut debut = [0u8; 12];
+        if std::fs::File::open(&f).and_then(|mut x| std::io::Read::read_exact(&mut x, &mut debut)).is_ok() && est_mp4(&debut) {
+            return Ok(f);
+        }
+        // une page HTML rendue à la place du fichier : on la jette et on retélécharge
+        std::fs::remove_file(&f)?;
     }
     std::fs::create_dir_all(videos())?;
     // écrit à côté puis renomme : un téléchargement coupé ne laisse pas de vidéo tronquée
     let part = videos().join(format!("{}.mp4.part", v.id.replace(':', "_")));
     let direct = match &v.media {
         // un lien expiré se rattrape par yt-dlp
-        Some(media) => http.donnees(&Requete::get(media.as_str()).entete("User-Agent", UA_NAVIGATEUR)).await.ok().filter(|d| !d.is_empty()),
+        Some(media) => http.donnees(&Requete::get(media.as_str()).entete("User-Agent", UA_NAVIGATEUR)).await.ok().filter(|d| est_mp4(d)),
         None => None,
     };
     match direct {
@@ -132,6 +137,9 @@ pub async fn fichier(v: &VideoVeille, http: &Http) -> Res<PathBuf> {
     std::fs::rename(&part, &f)?;
     Ok(f)
 }
+
+/// Un fichier MP4 commence par sa boîte `ftyp` ; un lien expiré rend une page HTML.
+fn est_mp4(debut: &[u8]) -> bool { debut.len() >= 12 && &debut[4..8] == b"ftyp" }
 
 /// Efface les vidéos téléchargées depuis plus de 14 jours. Une vidéo qui résiste est retentée au passage suivant.
 pub fn nettoyer_videos(maintenant: &Date) {
@@ -270,11 +278,19 @@ pub fn texte(o: &Map<String, Value>) -> Res<String> {
 
 pub fn lire(o: &Map<String, Value>) -> Res<AnalyseVeille> {
     let texte = texte(o)?;
-    let a: AnalyseVeille = serde_json::from_str(&texte).map_err(|e| format_err(format!("analyse illisible : {e}")))?;
+    let mut a: AnalyseVeille = serde_json::from_str(&texte).map_err(|e| format_err(format!("analyse illisible : {e}")))?;
+    a.app = a.app.as_deref().and_then(app_nommee);
     if !(0..=3).contains(&a.adaptable) {
         return Err(format_err(format!("analyse : adaptable = {}", a.adaptable)));
     }
     Ok(a)
+}
+
+/// Une app nommée par Claude, sans les réponses vides (« », « aucune », « none »…).
+pub fn app_nommee(app: &str) -> Option<String> {
+    let app = app.trim().trim_matches(['"', '«', '»', '.']).trim();
+    let vide = ["", "aucune", "aucun", "none", "null", "n/a", "-", "vide"].contains(&app.to_lowercase().as_str());
+    (!vide).then(|| app.to_string())
 }
 
 pub fn consigne(v: &VideoVeille, transcription: &str) -> String {
@@ -296,7 +312,9 @@ valeur (le cœur), placement (la place laissée à un produit ou un appel), fin 
 une phrase par bloc, « absent » s'il manque ; `parts` donne la part de la durée de chaque bloc en %, total 100, 0 s'il manque.
 `ecart` : ce qui distingue cette vidéo d'une vidéo ordinaire du même compte, d'après ce que tu vois.
 `adaptable` : 0 = intransposable, 3 = refaisable telle quelle dans notre niche.
-`idee` : la vidéo à tourner pour nous, en une phrase concrète.",
+`idee` : la vidéo à tourner pour nous, en une phrase concrète.
+`app` : le nom de l'app ou du produit dont la vidéo fait la promo, seulement s'il est clairement nommé (dit, écrit à
+l'écran ou dans la légende) ; vide sinon, ne devine jamais.",
         v.compte, v.plateforme.nom(), v.mot.as_deref().unwrap_or(""), v.legende.as_deref().unwrap_or("aucune"))
 }
 
@@ -326,6 +344,7 @@ pub fn schema(formats: &[String]) -> Value {
         ("ecart", texte("Ce qui change par rapport aux vidéos habituelles du compte")),
         ("adaptable", json!({"type": "integer", "description": "0 à 3"})),
         ("idee", texte("La vidéo à tourner pour nous")),
+        ("app", texte("L'app ou le produit promu, clairement nommé ; vide sinon")),
     ])
 }
 
@@ -358,8 +377,15 @@ pub mod tests {
             format: "4-erreurs".into(),
             blocs: Blocs { hook: "a".into(), confirmation: "b".into(), valeur: "c".into(), placement: "absent".into(), fin: "d".into() },
             parts: Some(Parts { hook: 10, confirmation: 15, valeur: 60, placement: 0, fin: 15 }),
-            ecart: "Plus court".into(), adaptable: 3, idee: "Les 3 erreurs de ser et estar".into(),
+            ecart: "Plus court".into(), adaptable: 3, idee: "Les 3 erreurs de ser et estar".into(), app: Some("Roleo".into()),
         }
+    }
+
+    #[test]
+    fn mp4_reconnu_par_sa_boite() {
+        assert!(est_mp4(b"\0\0\0\x20ftypisom\0\0\x02\0"));
+        assert!(!est_mp4(b"<!doctype html><html>"));
+        assert!(!est_mp4(b"ftyp"));
     }
 
     #[test]
@@ -421,6 +447,8 @@ pub mod tests {
         assert!(lire(&reponse(&texte, "refusal")).is_err());
         assert!(lire(&reponse(&texte, "max_tokens")).is_err());
         assert!(lire(&reponse("{}", "end_turn")).is_err());
+        let sans_app = texte.replace(r#""app":"Roleo""#, r#""app":" aucune ""#);
+        assert_eq!(lire(&reponse(&sans_app, "end_turn")).unwrap().app, None);
         let hors_borne = texte.replace(r#""adaptable":3"#, r#""adaptable":7"#);
         assert_ne!(hors_borne, texte);
         assert!(lire(&reponse(&hors_borne, "end_turn")).is_err());

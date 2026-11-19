@@ -1,5 +1,6 @@
 //! Les vidéos qui ont marché sur des mots-clés, sur TikTok et Instagram. Voir docs/sources/veille.md.
 pub mod analyse;
+pub mod classement;
 pub mod demande;
 pub mod instagram;
 pub mod parseurs;
@@ -38,6 +39,8 @@ const VIDEOS_PAR_DEFILEMENT: i64 = 5;
 const PAUSE: (f64, f64) = (20.0, 40.0);
 /// La pause entre deux recherches DuckDuckGo : un site qui limite, pas un site qui surveille.
 const PAUSE_SANS_PAGE: (f64, f64) = (3.0, 6.0);
+/// Au-delà, une vidéo n'entre plus dans la veille : la recherche ne trie pas par date, on écarte les vieilles.
+pub const AGE_MAX_JOURS: i64 = 365;
 pub const PLATEFORMES: [Plateforme; 2] = [Plateforme::Tiktok, Plateforme::Instagram];
 
 /// L'id de la source, que réserve aussi une demande à Claude : l'une attend que l'autre ait fini.
@@ -96,6 +99,7 @@ impl Source for Veille {
         echecs.extend(miniatures::telecharger(&images, &ctx.http).await);
         analyse::nettoyer_videos(&maintenant);
         echecs.extend(analyse::analyser(ctx, &maintenant).await);
+        echecs.extend(classement::classer(ctx, &maintenant).await);
         // tous les échecs : l'écran coupe, la base garde de quoi diagnostiquer
         if !echecs.is_empty() {
             return Err(format_err(format!("{} échecs : {}", echecs.len(), echecs.join(" ; "))));
@@ -229,7 +233,7 @@ async fn chercher(ctx: &Contexte, p: Plateforme, m: &MotVeille, voulues: i64, fo
             None => instagram::chercher(&ctx.http, &m.mot).await?,
         }
     };
-    let gardees = retenir(trouvees, m.vues_min, voulues);
+    let gardees = retenir(trouvees, m.vues_min, voulues, maintenant);
     ctx.store.lot(|| {
         for t in &gardees {
             ctx.store.trouvaille(t, &m.business, Some(&m.mot), maintenant)?;
@@ -342,10 +346,11 @@ fn compact(n: i64) -> String {
     format!("{}\u{a0}{}", decimale(arrondi(v)), UNITES[i])
 }
 
-/// Les `voulues` vidéos les plus récentes de la recherche parmi celles que `garde` retient ; une date inconnue passe
-/// après les autres.
-pub fn retenir(trouvees: Vec<Trouvaille>, vues_min: i64, voulues: i64) -> Vec<Trouvaille> {
-    let mut gardees: Vec<Trouvaille> = trouvees.into_iter().filter(|t| garde(t, vues_min)).collect();
+/// Les `voulues` vidéos les plus récentes de la recherche parmi celles que `garde` retient, de moins d'un an ; une date
+/// inconnue passe après les autres.
+pub fn retenir(trouvees: Vec<Trouvaille>, vues_min: i64, voulues: i64, maintenant: &Date) -> Vec<Trouvaille> {
+    let limite = *maintenant - Duration::days(AGE_MAX_JOURS);
+    let mut gardees: Vec<Trouvaille> = trouvees.into_iter().filter(|t| garde(t, vues_min) && t.publiee.is_none_or(|d| d >= limite)).collect();
     gardees.sort_by_key(|t| std::cmp::Reverse(t.publiee));
     gardees.truncate(voulues as usize);
     gardees
@@ -388,8 +393,9 @@ mod tests {
         };
         let trouvees = vec![video("vieille", Some(400), 90_000), video("sans-date", None, 90_000), video("faible", Some(1), 100), video("recente", Some(2), 30_000), video("moyenne", Some(40), 50_000)];
         let ids = |v: Vec<Trouvaille>| v.into_iter().map(|t| t.brut).collect::<Vec<_>>();
-        assert_eq!(ids(retenir(trouvees.clone(), 20_000, 2)), ["recente", "moyenne"]);
-        assert_eq!(ids(retenir(trouvees, 20_000, 10)), ["recente", "moyenne", "vieille", "sans-date"]);
+        assert_eq!(ids(retenir(trouvees.clone(), 20_000, 2, &t0())), ["recente", "moyenne"]);
+        // la vidéo de 400 jours est écartée, la date inconnue passe en dernier
+        assert_eq!(ids(retenir(trouvees, 20_000, 10, &t0())), ["recente", "moyenne", "sans-date"]);
     }
 
     #[test]

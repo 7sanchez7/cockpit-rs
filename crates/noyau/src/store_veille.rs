@@ -98,9 +98,26 @@ impl Store {
         Ok(self.db.query(&format!("{} {suite}", VideoVeille::SQL), params)?.iter().filter_map(VideoVeille::depuis_ligne).collect())
     }
 
+    /// Les vidéos de ces ids ; une liste vide ne donne rien (un `in ()` ne s'écrit pas).
+    pub fn videos_veille_par_ids(&self, ids: &[String]) -> Res<Vec<VideoVeille>> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        self.videos_veille(&format!("where v.id in ({})", vec!["?"; ids.len()].join(", ")), ids.iter().map(Into::into).collect())
+    }
+
     pub fn analyse_veille(&self, video: &str, at: &Date, modele: &str, a: &AnalyseVeille) -> Res<()> {
         self.db.execute("insert or replace into veille_analyse (video, at, modele, donnees) values (?, ?, ?, ?)",
             p![video, at, modele, serde_json::to_string(a)?])?;
+        // l'analyse en dit plus : la vidéo se reclasse
+        self.db.execute("update veille_video set classee = null where id = ?", p![video])?;
+        Ok(())
+    }
+
+    /// Le classement d'une vidéo : l'app promue, la langue, le genre.
+    pub fn classer_video(&self, video: &str, c: &Classement, at: &Date) -> Res<()> {
+        self.db.execute("update veille_video set app = ?, langue = ?, genre = ?, classee = ? where id = ?",
+            p![&c.app, &c.langue, &c.genre, at, video])?;
         Ok(())
     }
 
@@ -117,8 +134,8 @@ impl Store {
     pub fn nouvelle_demande(&self, d: &DemandeVeille) -> Res<()> {
         self.db.execute("update veille_demande set etat = ?, fin = ?, erreur = 'interrompue' where etat = ?",
             p![DemandeVeille::ECHOUEE, d.debut, DemandeVeille::EN_COURS])?;
-        self.db.execute("insert into veille_demande (id, business, prompt, debut, etat) values (?, ?, ?, ?, ?)",
-            p![&d.id, &d.business, &d.prompt, d.debut, &d.etat])?;
+        self.db.execute("insert into veille_demande (id, business, prompt, debut, etat, fil) values (?, ?, ?, ?, ?, ?)",
+            p![&d.id, &d.business, &d.prompt, d.debut, &d.etat, &d.fil])?;
         Ok(())
     }
 

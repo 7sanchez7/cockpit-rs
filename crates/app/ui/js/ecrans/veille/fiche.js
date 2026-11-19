@@ -73,6 +73,7 @@ function montrerCarte(el, { anime = true } = {}) {
     "div",
     { class: "carte-survol verre" },
     h("div", { class: "tete" }, logoPlateforme(v.plateforme), h("div", { class: "qui" }, h("div", { class: "compte" }, c.compte), h("div", { class: "meta" }, c.meta))),
+    etiquettes(c.etiquettes),
     viralite(c.viralite),
     h(
       "div",
@@ -103,6 +104,12 @@ function placer(el) {
   const gauche = r.right + marge + l <= innerWidth - marge ? r.right + marge : r.left - marge - l;
   carte.el.style.left = Math.max(marge, gauche) + "px";
   carte.el.style.top = Math.max(marge, Math.min(r.top, innerHeight - hauteur - marge)) + "px";
+}
+
+/** L'app promue, le genre et la langue ; rien si la vidéo n'est pas encore classée. */
+function etiquettes(liste) {
+  if (liste.length === 0) return null;
+  return h("div", { class: "etiquettes" }, liste.map((p) => pastille(p.texte, p.couleur ? { couleur: `var(--${p.couleur})` } : { neutre: true })));
 }
 
 /** Le coefficient de viralité en grand, coloré par son verdict. */
@@ -215,6 +222,7 @@ function corps(d, onglet, ctx) {
   if (onglet === "legende") return h("div", { class: "legende-fiche" }, d.legende);
   if (onglet === "analyse") return analyse(d);
   return [
+    etiquettes(d.etiquettes),
     h(
       "div",
       { class: "kpis-fiche" },
