@@ -79,7 +79,7 @@ Le catalogue des métriques est fermé : une métrique nouvelle s'ajoute ici et 
 | `vues_tiktok` | `VUES_TIKTOK` | -1 | vues | TikTok | vues gagnées dans la journée, toutes vidéos des comptes du business |
 | `vues_tiktok_j7` | `VUES_TIKTOK_J7` | -1 | vues | TikTok | idem, J-7 jusqu'à la même heure, quand les relevés existent |
 
-Les métriques de Firebase et de Classements ont leur constante dans `metrique.rs`, mais leurs sources ne sont pas encore portées ([`sources/README.md`](sources/README.md)) : aucune source Rust ne les écrit. Sur Mac, la version Swift peut les écrire dans la même base.
+Les métriques de Firebase et de Classements ont leur constante dans `metrique.rs` ; leurs sources sont décrites dans [`sources/firebase.md`](sources/firebase.md) et [`sources/classements-itunes.md`](sources/classements-itunes.md).
 
 | Métrique | Constante | Source (Swift) |
 |---|---|---|
@@ -158,7 +158,7 @@ La colonne « 24 h » de l'écran Vidéos est `vues(dernier relevé) − vues(re
 
 ### `app` et `rang`
 
-Toutes les apps dont on suit le classement : les nôtres (`business` non nul) et celles des autres. La source Classements n'est pas encore portée : en Rust, seul App Store Connect écrit `app` (l'app d'un business). Modèles : `Appli`, `Liste`.
+Toutes les apps dont on suit le classement : les nôtres (`business` non nul) et celles des autres. La source Classements les écrit, App Store Connect aussi pour l'app d'un business. Modèles : `Appli`, `Liste`.
 
 | `app` | Contenu |
 |---|---|
@@ -205,7 +205,7 @@ Une source synchronise ses tâches avec `Store::synchroniser_taches(source, busi
 
 ### `sav_fil`, `sav_message`, `sav_retour` et `sav_compte`
 
-L'écran SAV, recopié de Firestore par la source Firebase, pas encore portée. Le `Store` sait déjà les écrire : `synchroniser_sav` pour un passage, `repondre_sav`, `fermer_fil_sav` et `traiter_retour_sav` pour les actions de l'écran, `fils_lus` et `comptes_sav` pour savoir quoi relire. Modèles : `FilSAV`, `MessageSAV`, `RetourSAV`, `ReleveSAV`.
+L'écran SAV, recopié de Firestore par la source Firebase. Le `Store` les écrit : `synchroniser_sav` pour un passage, `repondre_sav`, `fermer_fil_sav` et `traiter_retour_sav` pour les actions de l'écran, `fils_lus` et `comptes_sav` pour savoir quoi relire. Modèles : `FilSAV`, `MessageSAV`, `RetourSAV`, `ReleveSAV`.
 
 | `sav_fil` | Contenu |
 |---|---|
@@ -269,7 +269,7 @@ L'arbre des installs de l'écran Data. PostHog réécrit `install` et `porte` au
 
 ### `veille_mot`, `veille_compte`, `veille_video`, `veille_releve`, `veille_analyse` et `veille_cout`
 
-La veille par mots-clés, à part des tables `compte` et `video` : les comptes trouvés ne sont pas suivis, leurs vidéos ne sont pas les nôtres. La source Veille n'est pas encore portée ; les écritures sont prêtes dans `crates/noyau/src/store_veille.rs`, les modèles dans `crates/noyau/src/modeles_veille.rs`.
+La veille par mots-clés, à part des tables `compte` et `video` : les comptes trouvés ne sont pas suivis, leurs vidéos ne sont pas les nôtres. Écrite par la source Veille ([`sources/veille.md`](sources/veille.md)), par `crates/noyau/src/store_veille.rs`, les modèles dans `crates/noyau/src/modeles_veille.rs`.
 
 | `veille_mot` | Contenu |
 |---|---|
@@ -327,7 +327,7 @@ Le journal du collecteur, une ligne par passage d'une source (`Store::journal`, 
 
 ### `plan`
 
-Le plan de l'Accueil, lu par la source Notes, pas encore portée. `Store::plan` vide la table et la réécrit ; aucun business. Modèle : `LignePlan`.
+Le plan de l'Accueil, lu par la source Notes ([`sources/notes.md`](sources/notes.md)). `Store::plan` vide la table et la réécrit ; aucun business. Modèle : `LignePlan`.
 
 | Colonne | Contenu |
 |---|---|

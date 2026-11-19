@@ -27,7 +27,7 @@ Chaque passage écrit une ligne dans `collecte` (`Store::journal`) : `ok` avec l
 | Facebook | `facebook` | `facebook.rs` | 3 h | [facebook](sources/facebook.md) |
 | Contenu | `contenu` | `contenu.rs` | 15 min | [contenu](sources/contenu.md) |
 
-Le registre, dans l'ordre de Santé, est `sources::toutes()` (`crates/noyau/src/sources/mod.rs`). Firebase, Classements, Notes et Veille n'y sont pas encore : voir [`sources/README.md`](sources/README.md).
+Le registre, dans l'ordre de Santé, est `sources::toutes()` (`crates/noyau/src/sources/mod.rs`). Une fiche par source dans [`sources/`](sources/README.md).
 
 Aides partagées, dans `crates/noyau/src/collecte/` :
 
