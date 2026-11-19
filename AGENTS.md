@@ -15,7 +15,7 @@ Cockpit est une app de bureau (Windows et Mac) pour suivre ses business, écrite
 | Lancer, tester, déboguer, fabriquer l'installeur | [`docs/runbook.md`](docs/runbook.md) |
 | Lire un chiffre, la veille, nos vidéos depuis un agent | CLI `cockpit` ([`docs/cli.md`](docs/cli.md)) |
 | Installer le cockpit sur une autre machine, pour un autre business | skill `/installer` ([`.claude/skills/installer/SKILL.md`](.claude/skills/installer/SKILL.md)), [`docs/runbook.md`](docs/runbook.md) § Installer |
-| Ajouter un business | [`docs/collecte.md`](docs/collecte.md) § Business et § Graine (l'onglet Business de Réglages n'est pas encore codé) |
+| Ajouter un business | [`docs/collecte.md`](docs/collecte.md) § Business et § Graine, ou Réglages, onglet Business |
 | Répondre aux users, traiter les retours | [`docs/ecrans.md`](docs/ecrans.md) § SAV, puis [`docs/sources/firebase.md`](docs/sources/firebase.md) § SAV |
 
 ## Règles

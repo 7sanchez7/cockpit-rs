@@ -15,7 +15,7 @@ Les 13 sources du registre (`sources::toutes()`, `crates/noyau/src/sources/mod.r
 | [youtube.md](youtube.md) | `youtube` | `youtube.rs` | 1 h | yt-dlp | Shorts, relevés, abonnés |
 | [facebook.md](facebook.md) | `facebook` | `facebook.rs` | 3 h | Meta Business Suite (API interne), session | vidéos, relevés, watch time, abonnés |
 | [contenu.md](contenu.md) | `contenu` | `contenu.rs` | 15 min | fiches vidéo du dépôt du business, en local | titre et format des vidéos, tâches « verdict » |
-| [firebase.md](firebase.md) | `firebase` | `firebase/` | 15 min | Firestore et Identity Toolkit de l'app, par les identifiants Google par défaut (gcloud) ; FCM pour les réponses du SAV, pas encore branchées | charge et coût IA, messages ouverts, retours nouveaux, tâches, fils IA, messages et retours, tables `sav_*` |
+| [firebase.md](firebase.md) | `firebase` | `firebase/` | 15 min | Firestore et Identity Toolkit de l'app, par les identifiants Google par défaut (gcloud) ; FCM pour les réponses du SAV, envoyées depuis l'écran SAV | charge et coût IA, messages ouverts, retours nouveaux, tâches, fils IA, messages et retours, tables `sav_*` |
 | [classements-itunes.md](classements-itunes.md) | `classements` | `classements.rs` | 3 h | iTunes : `viewTop`, flux RSS en repli, `lookup` | apps, rangs dans le top 200, note et nombre de notes, fil des rangs |
 | [notes.md](notes.md) | `notes` | `notes.rs` | 1 min | app Notes de macOS, en local (Mac seulement) | plan de l'Accueil |
 | [veille.md](veille.md) | `veille` | `veille/` | 6 h (reprise 3 h) | page TikTok et Instagram cachée dans l'app, yt-dlp, Claude | vidéos, relevés, comptes et analyses de la veille, coût des analyses, fil de la veille |
