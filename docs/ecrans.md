@@ -38,7 +38,7 @@ Où sont nos apps et celles des potes dans le top 200 de l'App Store, pays par p
 
 - **Top 200** : une ligne par app suivie, les nôtres d'abord (pastille « à nous ») : icône, éditeur, catégorie, note. Une colonne par pays des business affichés : le rang au dernier passage de Classements et les places gagnées depuis la veille (vert si elle monte, rouge si elle descend), « hors top » si l'app a été lue et n'y est pas. Bascules Gratuit, Payant ou Recettes, et sa catégorie (celle du business pour les nôtres) ou toutes (36). Un clic choisit l'app.
 - **Détail** de l'app choisie : son rang sur 30 jours, un pays à la fois, axe inversé (1er en haut, 5 places de marge, graduations rondes), un jour hors top coupe la ligne ; la grille pays par liste. « Ne plus suivre » pour une app de pote seulement (`apps_ne_plus_suivre`, ses rangs passés restent en base).
-- **Ajouter** : un id ou un lien App Store (`apps_suivre`). La fiche est lue sur iTunes tout de suite (`classements::ajouter_app`), les rangs arrivent au prochain passage de Classements ou en relançant la collecte. Le résultat, ou l'erreur en ambre, reste sous le champ.
+- **Ajouter** : un id ou un lien App Store (`apps_suivre`). La fiche est lue sur iTunes tout de suite (`classements::ajouter_app`), les rangs arrivent au prochain passage de Classements ou tout de suite avec ⌘R (Ctrl+R sous Windows). Le résultat, ou l'erreur en ambre, reste sous le champ.
 
 Lit `app` et `rang` (`l.apps()`, `l.rang_jours`) et les icônes du cache (`icone:<id>`). L'ajout d'une app est le seul accès réseau de l'écran (sa fiche et son icône).
 

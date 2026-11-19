@@ -199,7 +199,7 @@ pub async fn apps_suivre(etat: State<'_, Etat>, saisie: String) -> Rep<Ajout> {
     etat.store.a_change();
     Ok(match r {
         Ok(a) => Ajout {
-            texte: format!("{} suivie : ses rangs arrivent au prochain passage de Classements, ou tout de suite en relançant la collecte.", a.nom),
+            texte: format!("{} suivie : ses rangs arrivent au prochain passage de Classements, ou tout de suite avec {}.", a.nom, if cfg!(target_os = "macos") { "⌘R" } else { "Ctrl+R" }),
             erreur: false,
             id: Some(a.id),
         },
