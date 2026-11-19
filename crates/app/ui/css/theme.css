@@ -231,8 +231,9 @@
   --t-fiche-h: 760px;
   --t-tuile-fiche: 120px;
   --t-similaire: 76px;
+  --part-video-fiche: 42%;
   --f-engagement: 600 44px/1 var(--police);
-  --delai-survol: 350ms;
+  --delai-survol: 300ms;
   --delai-fermeture: 150ms;
 }
 

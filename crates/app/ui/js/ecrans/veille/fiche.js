@@ -6,37 +6,74 @@ import { h, icone, jeton, logoPlateforme, miniature, nombreJeton, pastille, segm
 
 // carte au survol
 
+// Un seul écouteur pour toute la page : une miniature inscrite par `survolCarte` porte `data-carte`, et la case sous
+// la souris se relit à chaque mouvement, défilement ou nouveau rendu ; la carte ne capte pas la souris.
+const videos = new Map();
 let carte = null;
 let minuteur = null;
+let souris = null;
 
-export function fermerCarte() {
+function fermerCarte() {
   clearTimeout(minuteur);
-  carte?.remove();
+  carte?.el.remove();
   carte = null;
 }
 
-/** Pose la carte de `v` à côté de `el` après un court survol ; elle reste ouverte tant que la souris est dessus. */
-export function survolCarte(el, v, ctx) {
-  const plusTard = (faire, delai) => {
-    clearTimeout(minuteur);
-    minuteur = setTimeout(faire, nombreJeton(delai));
-  };
-  el.addEventListener("mouseenter", () => plusTard(() => montrerCarte(el, v, ctx), "--delai-survol"));
-  el.addEventListener("mouseleave", () => plusTard(fermerCarte, "--delai-fermeture"));
+/** Inscrit la miniature `el` de `v` : la survoler montre sa carte. */
+export function survolCarte(el, v) {
+  el.dataset.carte = v.id;
+  videos.set(v.id, v);
 }
 
-function montrerCarte(el, v, ctx) {
+/** Après un nouveau rendu : la carte se refait sur la case encore sous la souris, ou se ferme. */
+export function recalerCarte() {
+  if (!carte) return;
+  const el = caseSousLaSouris();
+  if (el) montrerCarte(el, { anime: false });
+  else fermerCarte();
+}
+
+const caseSous = (cible) => cible?.closest?.("[data-carte]") ?? null;
+const caseSousLaSouris = () => souris && caseSous(document.elementFromPoint(souris.x, souris.y));
+
+function suivre(el) {
+  clearTimeout(minuteur);
+  if (el && carte?.ancre === el) return;
+  if (el) {
+    // d'une case à sa voisine, la carte suit sans attendre
+    if (carte) montrerCarte(el);
+    else minuteur = setTimeout(() => (el = caseSousLaSouris()) && montrerCarte(el), nombreJeton("--delai-survol"));
+  } else if (carte) {
+    minuteur = setTimeout(fermerCarte, nombreJeton("--delai-fermeture"));
+  }
+}
+
+document.addEventListener("pointermove", (e) => (souris = { x: e.clientX, y: e.clientY }), { passive: true, capture: true });
+document.addEventListener("mouseover", (e) => suivre(caseSous(e.target)), true);
+document.addEventListener("mouseout", (e) => !e.relatedTarget && fermerCarte(), true);
+document.addEventListener("mousedown", fermerCarte, true);
+document.addEventListener(
+  "scroll",
+  () => {
+    if (!carte) return;
+    const el = caseSousLaSouris();
+    if (el?.dataset.carte === carte.id) placer(el);
+    else fermerCarte();
+  },
+  true,
+);
+addEventListener("blur", fermerCarte);
+
+function montrerCarte(el, { anime = true } = {}) {
+  const v = videos.get(el.dataset.carte);
   fermerCarte();
-  if (!el.isConnected) return;
+  if (!v || !el.isConnected) return;
   const c = v.carte;
-  carte = h(
+  const node = h(
     "div",
-    {
-      class: "carte-survol verre",
-      onmouseenter: () => clearTimeout(minuteur),
-      onmouseleave: () => (minuteur = setTimeout(fermerCarte, nombreJeton("--delai-fermeture"))),
-    },
+    { class: "carte-survol verre" },
     h("div", { class: "tete" }, logoPlateforme(v.plateforme), h("div", { class: "qui" }, h("div", { class: "compte" }, c.compte), h("div", { class: "meta" }, c.meta))),
+    viralite(c.viralite),
     h(
       "div",
       { class: "chiffres" },
@@ -44,32 +81,40 @@ function montrerCarte(el, v, ctx) {
     ),
     h("div", { class: "filet" }),
     h("div", { class: "section-carte" }, surtitre("Anatomie du script"), c.anatomie.length ? anatomie(c.anatomie) : h("div", { class: "attente" }, c.attente)),
-    h(
-      "button",
-      { class: "voir-analyse", onclick: () => ouvrirFiche(v.id, ctx, "analyse") },
-      "Voir l'analyse",
-      h("span", { class: "fleche" }, "→"),
-    ),
+    h("div", { class: "indice" }, "Clic : la vidéo, l'analyse et les similaires"),
   );
-  document.body.append(carte);
-  // à droite de la case, à gauche si la place manque ; gardée dans la fenêtre
-  const r = el.getBoundingClientRect();
-  const marge = nombreJeton("--e-m");
-  const l = carte.offsetWidth;
-  const gauche = r.right + marge + l <= innerWidth - marge ? r.right + marge : r.left - marge - l;
-  carte.style.left = Math.max(marge, gauche) + "px";
-  carte.style.top = Math.max(marge, Math.min(r.top, innerHeight - carte.offsetHeight - marge)) + "px";
-  if (!sobre()) {
-    carte.animate([{ opacity: 0, transform: `scale(${jeton("--appui")})` }, { opacity: 1, transform: "none" }], {
+  carte = { el: node, id: v.id, ancre: el };
+  document.body.append(node);
+  placer(el);
+  if (anime && !sobre()) {
+    node.animate([{ opacity: 0, transform: `scale(${jeton("--appui")})` }, { opacity: 1, transform: "none" }], {
       duration: nombreJeton("--duree-survol"),
       easing: jeton("--ressort-survol"),
     });
   }
 }
 
-// défiler ou cliquer ailleurs ferme la carte
-document.addEventListener("scroll", fermerCarte, true);
-document.addEventListener("mousedown", (e) => carte && !carte.contains(e.target) && fermerCarte(), true);
+/** À droite de la case, à gauche si la place manque ; gardée dans la fenêtre. */
+function placer(el) {
+  carte.ancre = el;
+  const r = el.getBoundingClientRect();
+  const marge = nombreJeton("--e-m");
+  const { offsetWidth: l, offsetHeight: hauteur } = carte.el;
+  const gauche = r.right + marge + l <= innerWidth - marge ? r.right + marge : r.left - marge - l;
+  carte.el.style.left = Math.max(marge, gauche) + "px";
+  carte.el.style.top = Math.max(marge, Math.min(r.top, innerHeight - hauteur - marge)) + "px";
+}
+
+/** Le coefficient de viralité en grand, coloré par son verdict. */
+function viralite(x) {
+  return h(
+    "div",
+    { class: "viralite", style: { "--c": `var(--${x.couleur})` } },
+    surtitre("Viralité"),
+    h("div", { class: "coef" }, h("span", { class: "valeur" }, x.valeur), h("span", { class: "verdict" }, x.verdict)),
+    h("div", { class: "detail" }, x.detail),
+  );
+}
 
 /** La barre segmentée des blocs du script et sa légende ; `detail` ajoute la phrase de chaque bloc. */
 function anatomie(segments, { detail = false } = {}) {
@@ -170,17 +215,22 @@ function corps(d, onglet, ctx) {
   if (onglet === "legende") return h("div", { class: "legende-fiche" }, d.legende);
   if (onglet === "analyse") return analyse(d);
   return [
-    d.engagement &&
+    h(
+      "div",
+      { class: "kpis-fiche" },
+      viralite(d.viralite),
       h(
         "div",
-        { class: "engagement" },
-        h("div", { class: "taux" }, h("span", { class: "chiffre" }, d.engagement), h("span", { class: "unite" }, "d'engagement")),
+        { class: "viralite", style: { "--c": "var(--texte)" } },
+        surtitre("Engagement"),
+        h("div", { class: "coef" }, h("span", { class: "valeur" }, d.engagement ?? "…")),
         d.rang && pastille(d.rang, { couleur: d.rang.startsWith("Top") ? "var(--succes)" : "var(--secondaire)" }),
       ),
+    ),
     h(
       "div",
       { class: "tuiles-fiche" },
-      d.chiffres.map((x) => h("div", { class: "tuile" }, surtitre(x.nom), h("div", { class: "valeur" + (x.succes ? " succes" : "") }, x.valeur))),
+      d.chiffres.map((x) => h("div", { class: "tuile" }, surtitre(x.nom), h("div", { class: "valeur" }, x.valeur))),
     ),
     d.similaires.length > 0 &&
       h(
@@ -189,7 +239,7 @@ function corps(d, onglet, ctx) {
         surtitre("Vidéos similaires"),
         h(
           "div",
-          { class: "rangee-similaires" },
+          { class: "grille-similaires" },
           d.similaires.map((s) =>
             h(
               "button",

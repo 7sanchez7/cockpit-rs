@@ -5,7 +5,7 @@
 
 import { enTetePanneau, h, icone, pilule, rendu, segmente, surtitre, vide } from "../composants.js";
 import { bouton, caseVideo, choixBusiness, menuContextuel, popover, remplacer } from "./videos/commun.js";
-import { fermerCarte, ouvrirFiche, survolCarte } from "./veille/fiche.js";
+import { ouvrirFiche, recalerCarte, survolCarte } from "./veille/fiche.js";
 
 const TRIS = [
   { id: "ratio", libelle: "× médiane" },
@@ -177,7 +177,7 @@ function caseGrille(v, ctx, { legende, lignes }) {
     lignes,
     clic: () => ouvrirFiche(v.id, ctx),
   });
-  survolCarte(el.querySelector(".affiche"), v, ctx);
+  survolCarte(el.querySelector(".affiche"), v);
   return menuContextuel(el, [{ libelle: `Ouvrir sur ${v.nomPlateforme}`, faire: () => ctx.lien(v.url) }]);
 }
 
@@ -249,7 +249,6 @@ const ecran = {
   async rendre(racine, ctx) {
     if (!ctx.rafraichi) Object.assign(etat, INITIAL);
     dernier = { racine, ctx };
-    fermerCarte();
     const d = await ctx.appeler("veille", { business: ctx.business, tri: etat.tri, plateforme: etat.plateforme, outliers: etat.outliers, mot: etat.mot });
     ctx.page.sousTitre(d.sousTitre);
     ctx.page.outils(...outils(d, ctx));
@@ -257,6 +256,7 @@ const ecran = {
     const panneau = etat.vue === "demande" ? panneauDemande(d, ctx) : panneauVeille(d, ctx);
     panneau.classList.add("remplit");
     remplacer(racine, rangeeMots(d, ctx), panneau);
+    recalerCarte();
   },
 };
 

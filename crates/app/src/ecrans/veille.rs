@@ -7,7 +7,7 @@ use noyau::collecte::miniatures;
 use noyau::jour::Date;
 use noyau::lecture::format;
 use noyau::modeles::Plateforme;
-use noyau::modeles_veille::{AnalyseVeille, DemandeVeille, MotVeille, VideoVeille};
+use noyau::modeles_veille::{AnalyseVeille, DemandeVeille, MotVeille, ScoreVeille, VideoVeille};
 use noyau::p;
 use noyau::sources::veille::{analyse, demande, videos_par_mot, ID, PLATEFORMES, REGLAGE_VIDEOS, VIDEOS_MAX, VIDEOS_MIN, VIDEOS_PAS};
 use serde::{Deserialize, Serialize};
@@ -105,6 +105,7 @@ pub struct Carte {
     compte: String,
     /// « il y a 3 j · TikTok · 42 s ».
     meta: String,
+    viralite: Viralite,
     chiffres: Vec<Chiffre>,
     /// Les blocs du script ; vide sans analyse.
     anatomie: Vec<Segment>,
@@ -112,11 +113,23 @@ pub struct Carte {
     attente: &'static str,
 }
 
+/// Le coefficient de viralité : les vues rapportées à la médiane du compte.
+#[derive(Serialize)]
+pub struct Viralite {
+    /// « 471× ».
+    valeur: String,
+    /// « Virale », « Percée », « Au-dessus de sa médiane », « Sous sa médiane », « Médiane inconnue ».
+    verdict: &'static str,
+    /// Le jeton de couleur du chiffre et du verdict.
+    couleur: &'static str,
+    /// « 3,7 M vues, médiane du compte 7 850 ».
+    detail: String,
+}
+
 #[derive(Serialize)]
 pub struct Chiffre {
     nom: &'static str,
     valeur: String,
-    succes: bool,
 }
 
 #[derive(Serialize)]
@@ -141,6 +154,7 @@ pub struct FicheVeille {
     meta: String,
     mot: Option<String>,
     legende: Option<String>,
+    viralite: Viralite,
     /// « 15,8 % ».
     engagement: Option<String>,
     /// « Top 6 % de la bibliothèque ».
@@ -338,10 +352,15 @@ fn trier(v: &mut [&VideoVeille], tri: Tri) {
 /// La mesure d'une vidéo pour le tri choisi ; le tri par vues montre aussi le ratio, plus parlant.
 fn badge(v: &VideoVeille, tri: Tri, m: &Date) -> Option<String> {
     match tri {
-        Tri::Ratio | Tri::Vues => v.ratio().map(|r| format!("{}×", format::decimal(r, if r < 10.0 { 1 } else { 0 }))),
+        Tri::Ratio | Tri::Vues => v.ratio().map(fois),
         Tri::Vitesse => v.vitesse.map(|x| format!("{}/h", format::compact(x))),
         Tri::Recentes => v.publiee.map(|d| format::age(&d, m)),
     }
+}
+
+/// « 2,5× », « 471× ».
+fn fois(r: f64) -> String {
+    format!("{}×", format::decimal(r, if r < 10.0 { 1 } else { 0 }))
 }
 
 fn pilule(w: &MotVeille, toutes: &[VideoVeille], m: &Date) -> PiluleMot {
@@ -369,10 +388,11 @@ fn case(v: &VideoVeille, tri: Tri, m: &Date) -> CaseVeille {
         carte: Carte {
             compte: format!("@{}", v.compte),
             meta: meta(v, m),
-            chiffres: chiffres(v, &[
+            viralite: viralite(v),
+            chiffres: chiffres(&[
                 ("Vues", v.vues.map(|n| format::compact(n as f64))),
                 ("Likes", v.likes.map(|n| format::compact(n as f64))),
-                ("Likes / 1k vues", v.likes.zip(v.vues.filter(|n| *n > 0)).map(|(l, n)| format::decimal(l as f64 * 1000.0 / n as f64, 1))),
+                ("Engagement", v.engagement().map(|e| format::pourcent(e, 1))),
             ]),
             anatomie: v.analyse.as_ref().map(anatomie).unwrap_or_default(),
             attente: attente(v),
@@ -386,9 +406,37 @@ fn meta(v: &VideoVeille, m: &Date) -> String {
         .into_iter().flatten().collect::<Vec<_>>().join(" · ")
 }
 
-/// Les chiffres connus ; le × médiane d'un outlier se lit en vert.
-fn chiffres(v: &VideoVeille, liste: &[(&'static str, Option<String>)]) -> Vec<Chiffre> {
-    liste.iter().filter_map(|(nom, valeur)| Some(Chiffre { nom, valeur: valeur.clone()?, succes: *nom == "× médiane" && v.outlier() })).collect()
+/// Les chiffres connus.
+fn chiffres(liste: &[(&'static str, Option<String>)]) -> Vec<Chiffre> {
+    liste.iter().filter_map(|(nom, valeur)| Some(Chiffre { nom, valeur: valeur.clone()? })).collect()
+}
+
+/// Virale pour un outlier, percée dès 2× la médiane.
+fn viralite(v: &VideoVeille) -> Viralite {
+    let compte = |n: Option<i64>| n.map_or(format::VIDE.into(), |n| format::compact(n as f64));
+    let Some(r) = v.ratio() else {
+        return Viralite {
+            valeur: format::VIDE.into(),
+            verdict: "Médiane inconnue",
+            couleur: "tertiaire",
+            detail: format!("{} vues, médiane du compte pas encore relevée", compte(v.vues)),
+        };
+    };
+    let (verdict, couleur) = if v.outlier() {
+        ("Virale", "succes")
+    } else if r >= ScoreVeille::RATIO_PERCEE {
+        ("Percée", "ambre")
+    } else if r >= 1.0 {
+        ("Au-dessus de sa médiane", "secondaire")
+    } else {
+        ("Sous sa médiane", "tertiaire")
+    };
+    Viralite {
+        valeur: fois(r),
+        verdict,
+        couleur,
+        detail: format!("{} vues, médiane du compte {}", compte(v.vues), compte(v.mediane)),
+    }
 }
 
 fn attente(v: &VideoVeille) -> &'static str {
@@ -407,16 +455,15 @@ fn fiche(v: &VideoVeille, toutes: &[VideoVeille], m: &Date) -> FicheVeille {
         meta: meta(v, m),
         mot: v.mot.clone(),
         legende: v.legende.clone().filter(|l| !l.trim().is_empty()),
+        viralite: viralite(v),
         engagement: v.engagement().map(|e| format::pourcent(e, 1)),
         rang: rang(v, toutes),
-        chiffres: chiffres(v, &[
+        chiffres: chiffres(&[
             ("Vues", v.vues.map(|n| format::entier(n as f64))),
             ("Likes", compte(v.likes)),
             ("Commentaires", compte(v.commentaires)),
             ("Partages", compte(v.partages)),
             ("Enregistrements", compte(v.enregistrements)),
-            ("× médiane", v.ratio().map(|r| format!("{}×", format::decimal(r, 1)))),
-            ("Médiane du compte", compte(v.mediane)),
             ("Vues/h", v.vitesse.map(format::compact)),
             ("Abonnés", compte(v.abonnes)),
             ("Pull", v.pull().map(|p| format::pourcent(p, 1))),
@@ -524,5 +571,20 @@ mod tests {
         assert_eq!(noms(&anatomie(&a)), [("Hook", None), ("Confirmation", None), ("Valeur", None), ("Fin", None)]);
         a.parts = Some(noyau::modeles_veille::Parts { hook: 10, confirmation: 0, valeur: 60, placement: 0, fin: 10 });
         assert_eq!(noms(&anatomie(&a)), [("Hook", Some(13)), ("Valeur", Some(75)), ("Fin", Some(13))]);
+    }
+
+    #[test]
+    fn viralite_par_rapport_a_la_mediane() {
+        let avec = |vues, likes, mediane| VideoVeille { mediane, ..video("x", vues, likes) };
+        let verdict = |v: &VideoVeille| {
+            let x = viralite(v);
+            (x.valeur, x.verdict, x.couleur)
+        };
+        assert_eq!(verdict(&avec(3_700_000, 400_000, Some(7_850))), ("471×".into(), "Virale", "succes"));
+        assert_eq!(verdict(&avec(25_000, 10, Some(10_000))), ("2,5×".into(), "Percée", "ambre"));
+        assert_eq!(verdict(&avec(12_000, 10, Some(10_000))), ("1,2×".into(), "Au-dessus de sa médiane", "secondaire"));
+        assert_eq!(verdict(&avec(5_000, 10, Some(10_000))), ("0,5×".into(), "Sous sa médiane", "tertiaire"));
+        assert_eq!(verdict(&avec(5_000, 10, None)), ("…".into(), "Médiane inconnue", "tertiaire"));
+        assert_eq!(viralite(&avec(3_700_000, 400_000, Some(7_850))).detail, "3,7 M vues, médiane du compte 7\u{202f}850");
     }
 }
