@@ -26,7 +26,7 @@ Tout se lance depuis la racine du dépôt.
 | Images (miniatures, avatars, icônes) | `~/Library/Caches/Cockpit/` | `%LOCALAPPDATA%\Cockpit\` |
 | Clés | Trousseau, service `cockpit` | Gestionnaire d'identification, « Informations d'identification Windows », `<business>.<NOM>.cockpit` |
 
-Sur Mac, ce sont les dossiers et le trousseau de la version SwiftUI : les deux apps se relaient sur la même base. `COCKPIT_DIR=<dossier>` remplace le dossier des données (et met le cache dans `<dossier>/cache`), pour essayer l'app sur une copie de la base.
+Sur Mac, ce sont les dossiers et le trousseau de la version SwiftUI : les deux apps se relaient sur la même base. Le bundle porte aussi son identifiant (`com.tonysanchez.cockpit`, `crates/app/tauri.conf.json`) : `Cockpit.app` remplace l'autre dans Applications, une seule des deux tourne à la fois. `COCKPIT_DIR=<dossier>` remplace le dossier des données (et met le cache dans `<dossier>/cache`), pour essayer l'app sur une copie de la base.
 
 ## Installer
 
