@@ -69,7 +69,7 @@ Seulement les outliers trouvés dans les 14 derniers jours sans analyse, les plu
 
 ## Les mots-clés
 
-`Store::ajouter_mot(business, mot, vues_min)` (le mot est rogné, un mot vide est ignoré, un mot existant est réactivé avec le nouveau seuil), `retirer_mot` (mot rogné aussi), `activer_mot`. Aujourd'hui, seule la CLI les écrit : `cockpit veille mot ajoute` et `cockpit veille mot retire` ([../cli.md](../cli.md)). L'écran Veille n'est pas encore codé.
+`Store::ajouter_mot(business, mot, vues_min)` (le mot est rogné, un mot vide est ignoré, un mot existant est réactivé avec le nouveau seuil), `retirer_mot` (mot rogné aussi), `activer_mot`. L'écran Veille les appelle (pilules de mots-clés, [../ecrans.md](../ecrans.md) § Veille), la CLI aussi : `cockpit veille mot ajoute` et `cockpit veille mot retire` ([../cli.md](../cli.md)).
 
 ## Ce qui peut casser
 

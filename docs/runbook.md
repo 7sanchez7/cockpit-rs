@@ -76,7 +76,7 @@ C'est une vérification de compilation : l'installeur Windows se fabrique sur Wi
 
 ## Comptes vidéo
 
-La graine les ajoute ([`collecte.md`](collecte.md) § Graine) ; l'écran Vidéos, quand il sera codé, les ajoutera, mettra en pause et retirera ; un agent fait la même chose dans la base, puis relance les sources (Ctrl+R ou ⌘R, ou F5). L'id est `<plateforme>:<compte>`, le compte sans `@`, en minuscules ; pour Facebook, le nom de la Page ou son id.
+La graine les ajoute ([`collecte.md`](collecte.md) § Graine) ; l'écran Vidéos les ajoute, les met en pause et les retire ([`ecrans.md`](ecrans.md) § Vidéos) ; un agent fait la même chose dans la base, puis relance les sources (Ctrl+R ou ⌘R, ou F5). L'id est `<plateforme>:<compte>`, le compte sans `@`, en minuscules ; pour Facebook, le nom de la Page ou son id.
 
 ```bash
 B=~/Library/Application\ Support/Cockpit/cockpit.sqlite     # Windows : "$APPDATA/Cockpit/cockpit.sqlite"
