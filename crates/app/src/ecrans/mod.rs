@@ -82,5 +82,15 @@ pub fn commandes() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
         apps::apps,
         apps::apps_suivre,
         apps::apps_ne_plus_suivre,
+        videos::videos,
+        videos::handle_compte,
+        videos::suivre_compte,
+        videos::activer_compte,
+        videos::retirer_compte,
+        videos::ouvrir_fiche,
+        veille::veille,
+        veille::ajouter_mot,
+        veille::activer_mot,
+        veille::retirer_mot,
     ]
 }
