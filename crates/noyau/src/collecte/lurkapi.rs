@@ -204,6 +204,7 @@ mod tests {
         assert_eq!(t.compte, "profe.ana");
         assert_eq!((t.vues, t.likes, t.enregistrements, t.abonnes), (Some(250_000), Some(9_000), Some(1_200), Some(12_000)));
         assert_eq!(t.duree_s, Some(21.0));
+        assert_eq!(t.media.as_deref(), Some("https://cdn/v.mp4"));
         assert_eq!(t.legende.as_deref(), Some("3 erreurs en espagnol"));
     }
 

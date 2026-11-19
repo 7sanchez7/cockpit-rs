@@ -73,7 +73,7 @@ pub fn tiktok(d: &Map<String, Value>) -> Option<Trouvaille> {
         enregistrements: n("collectCount"),
         abonnes: nombre(d.get("authorStats").and_then(|s| s.get("followerCount"))).or_else(|| nombre(auteur.get("followerCount"))),
         image: video.get("cover").and_then(Value::as_str).or_else(|| video.get("originCover").and_then(Value::as_str)).map(String::from),
-        media: None,
+        media: ["playAddr", "downloadAddr", "playUrl"].iter().find_map(|c| video.get(*c).and_then(Value::as_str)).map(String::from),
     })
 }
 
