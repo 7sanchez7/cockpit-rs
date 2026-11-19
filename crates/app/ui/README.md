@@ -56,6 +56,7 @@ Le contexte :
 | `version`, `maintenant`, `rafraichi` | la version de la base, l'heure du rendu, faux au premier rendu |
 | `page.sousTitre(t)`, `page.outils(...n)` | l'en-tête |
 | `abonner(fn) -> arrêt` | voir plus haut |
+| `choix` | `{ genre, id }` quand la palette ouvre l'écran sur un résultat (`video`, `app`, `tache`), null sinon ; valable pour ce seul rendu |
 
 ## Appeler Rust
 

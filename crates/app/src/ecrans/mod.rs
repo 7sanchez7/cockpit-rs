@@ -4,6 +4,7 @@ pub mod accueil;
 pub mod apps;
 pub mod barre;
 pub mod data;
+pub mod palette;
 pub mod reglages;
 pub mod sante;
 pub mod sav;
@@ -54,5 +55,21 @@ pub fn commandes() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
         commandes::relancer,
         commandes::session,
         commandes::lien,
+        reglages::reglages_business,
+        reglages::enregistrer_business,
+        reglages::supprimer_business,
+        reglages::reglages_cles,
+        reglages::ranger_cle,
+        reglages::effacer_cle,
+        reglages::reglages_notifs,
+        reglages::reglages_collecte,
+        reglages::montrer_base,
+        reglages::reglages_sessions,
+        barre::barre,
+        barre::barre_ouvrir,
+        barre::barre_cacher,
+        barre::barre_taille,
+        barre::quitter,
+        palette::chercher,
     ]
 }

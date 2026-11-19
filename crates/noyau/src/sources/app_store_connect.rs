@@ -153,7 +153,7 @@ pub fn ecrire(avis: &[Avis], version: Option<Evenement>, app: &str, business: &s
 // jeton
 
 /// Là où Apple et les outils de Roleo rangent la clé `AuthKey_<KEYID>.p8` ; elle n'en sort jamais.
-fn dossier_cles() -> Res<PathBuf> {
+pub fn dossier_cles() -> Res<PathBuf> {
     let maison = dirs::home_dir().ok_or_else(|| Erreur::NonConfigure("dossier personnel introuvable".into()))?;
     Ok(maison.join(".appstoreconnect").join("private_keys"))
 }

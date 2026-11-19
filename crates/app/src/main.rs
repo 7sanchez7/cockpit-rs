@@ -50,6 +50,7 @@ fn main() {
             let hote = Arc::new(hote::HoteApp { app: app.handle().clone(), pages });
             let collecteur = Collecteur::new(store.clone(), noyau::sources::toutes(), hote);
             app.manage(Etat { store: store.clone(), collecteur: collecteur.clone() });
+            app.manage(ecrans::barre::EtatBarre::default());
             app.asset_protocol_scope().allow_directory(noyau::chemins::cache(), true)?;
             tray::creer(app.handle())?;
             let poignee = app.handle().clone();

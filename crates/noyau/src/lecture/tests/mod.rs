@@ -10,6 +10,7 @@ mod format;
 mod lectures;
 mod percee;
 mod sante;
+mod recherche;
 mod store;
 mod videos;
 mod widget;

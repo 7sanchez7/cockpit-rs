@@ -2,6 +2,7 @@
 //
 //   ouvrirPalette(actions) -> fermer() -> vrai si elle était ouverte
 //     actions.resultats() -> [{ icone | avatar, titre, detail, faire() }]  tous les résultats, la palette filtre
+//     actions.chercher(texte) -> Promise<[même forme]>  facultatif : ce que la base trouve, ajouté après, déjà filtré
 // Flèches pour bouger, Entrée pour lancer, Échap ou un clic sur le voile pour fermer.
 
 import { h, icone, avatar, vide, glisseur, sobre, jeton, nombreJeton } from "./composants.js";
@@ -38,12 +39,10 @@ export function ouvrirPalette(actions) {
     r.faire();
   };
 
-  const remplir = () => {
-    const q = normaliser(champ.value.trim());
-    trouves = actions
-      .resultats()
-      .filter((r) => !q || normaliser(r.titre).includes(q) || normaliser(r.detail ?? "").includes(q))
-      .slice(0, MAX_RESULTATS);
+  let demande = 0;
+
+  const montrer = (resultats, garder) => {
+    trouves = resultats.slice(0, MAX_RESULTATS);
     lignes = trouves.map((r, i) =>
       h(
         "button",
@@ -54,7 +53,20 @@ export function ouvrirPalette(actions) {
       ),
     );
     liste.replaceChildren(liste.firstChild, ...(lignes.length ? lignes : [vide("Rien ne correspond.")]));
-    choisir(0, false);
+    choisir(garder ? Math.min(choix, Math.max(0, lignes.length - 1)) : 0, garder);
+  };
+
+  const remplir = () => {
+    const texte = champ.value.trim();
+    const q = normaliser(texte);
+    const fixes = actions.resultats().filter((r) => !q || normaliser(r.titre).includes(q) || normaliser(r.detail ?? "").includes(q));
+    montrer(fixes, false);
+    const n = ++demande;
+    if (!q || !actions.chercher) return;
+    actions.chercher(texte).then(
+      (plus) => n === demande && ouverte && plus.length && montrer([...fixes, ...plus], true),
+      (e) => console.error(e),
+    );
   };
 
   function fermer() {

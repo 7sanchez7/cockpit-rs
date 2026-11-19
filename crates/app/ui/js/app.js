@@ -15,6 +15,7 @@
 //   plateforme               "macos", "windows" ou "linux"
 //   version, maintenant      la version de la base, l'heure du rendu (Date)
 //   rafraichi                faux au premier rendu, vrai ensuite
+//   choix                    ce que la palette a choisi de montrer ({ genre: "video" | "app" | "tache", id }), au seul rendu qui suit, sinon null
 //   page.sousTitre(texte), page.outils(...noeuds)   l'en-tête de la page
 //   abonner(fn) -> arrêt     fn(ctx) remplace le re-rendu complet tant que l'écran est affiché
 
@@ -37,7 +38,7 @@ const NAVIGATION = 7;
 const GAUCHE = 5;
 const HORLOGE = 30_000;
 
-const etat = { ecran: "app", business: null, fenetre: null, version: -1 };
+const etat = { ecran: "app", business: null, fenetre: null, version: -1, choix: null };
 let mac = true;
 let courant = null;
 let fermerPalette = null;
@@ -223,6 +224,7 @@ function contexte(rafraichi) {
     version: f.version,
     maintenant: new Date(),
     rafraichi,
+    choix: etat.choix,
     page: courant.page,
     abonner: (fn) => {
       courant.abonnes.add(fn);
@@ -267,6 +269,7 @@ async function rendreCourant(rafraichi) {
   const c = courant;
   rendu.calme = rafraichi;
   const ctx = contexte(rafraichi);
+  etat.choix = null;
   if (rafraichi && c.abonnes.size) {
     for (const fn of c.abonnes) await fn(ctx);
   } else {
@@ -354,6 +357,22 @@ function mettreEnPause(oui) {
 
 // palette
 
+// ce que trouve la base : le genre donne l'icône et l'écran qui le montre
+const TROUVES = { video: "videos", app: "apps", tache: "aTraiter" };
+
+function montrerTrouve(t) {
+  const ecran = TROUVES[t.genre];
+  etat.choix = { genre: t.genre, id: t.id };
+  if (courant?.id === ecran) enFile(() => rendreCourant(true));
+  else aller(ecran);
+}
+
+function chercher(texte) {
+  return appeler("chercher", { business: etat.business, requete: texte }).then((trouves) =>
+    trouves.map((t) => ({ icone: TROUVES[t.genre], titre: t.titre, detail: t.detail, faire: () => montrerTrouve(t) })),
+  );
+}
+
 function palette() {
   // ⌘K referme une palette ouverte
   if (fermerPalette?.()) return;
@@ -369,6 +388,7 @@ function palette() {
       ...(f.businesses.length > 1 ? [{ avatar: null, titre: "Afficher tous les business", detail: "Business", faire: () => choisirBusiness(null) }] : []),
       ...f.businesses.map((b) => ({ avatar: b, titre: "Afficher " + b.nom, detail: "Business", faire: () => choisirBusiness(b.id) })),
     ],
+    chercher,
   });
 }
 

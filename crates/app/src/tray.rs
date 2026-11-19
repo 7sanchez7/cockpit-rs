@@ -1,5 +1,6 @@
 //! L'icône de la barre des tâches (ou de la barre de menus) : le nombre de choses à traiter, les chiffres du jour en
-//! info-bulle, et un menu pour ouvrir, relancer, mettre en pause, quitter. Elle remplace le widget du bureau du Mac.
+//! info-bulle, un menu (clic droit) pour ouvrir, relancer, mettre en pause, quitter, et la fenêtre de la barre au clic
+//! gauche (`ecrans::barre`). Elle remplace le widget du bureau du Mac.
 use crate::Etat;
 use noyau::collecte::collecteur::REGLAGE_PAUSE;
 use tauri::image::Image;
@@ -56,8 +57,8 @@ pub fn creer(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|icone, e| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
-                montrer(icone.app_handle());
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, .. } = e {
+                crate::ecrans::barre::basculer(icone.app_handle(), rect);
             }
         })
         .build(app)?;
