@@ -6,7 +6,7 @@ license.workspace = true
 description = "Cockpit : les chiffres de tes apps et de tes vidéos, au même endroit."
 default-run = "cockpit-app"
 
-# la CLI s'appelle déjà `cockpit` ; le bundle renomme l'app en Cockpit (mainBinaryName)
+# la CLI s'appelle déjà `cockpit`, et Cockpit la remplacerait sur un disque insensible à la casse (Mac, Windows)
 [[bin]]
 name = "cockpit-app"
 path = "src/main.rs"
