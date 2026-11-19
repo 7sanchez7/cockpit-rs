@@ -1,0 +1,208 @@
+/* Les jetons du Cockpit, portés de Theme.swift. Aucune couleur ni taille en dur ailleurs : tout passe par ces variables. */
+
+:root {
+  color-scheme: dark;
+
+  /* couleurs */
+  --fond: #050506;
+  --carte: #0C0C0E;
+  --releve: #17171A;
+  --texte: #F5F5F4;
+  --secondaire: #A1A1A6;
+  --tertiaire: #66666C;
+  --accent: var(--texte);
+  --succes: #4ADE80;
+  --ambre: #FBBF24;
+  --danger: #F87171;
+  --orange: #D95926;
+  --bleu: #3987E5;
+  --aqua: #199E70;
+  --violet: #9085E9;
+  --noir: #000;
+
+  /* opacités du blanc */
+  --blanc-bord: rgb(255 255 255 / .07);
+  --blanc-bord-fort: rgb(255 255 255 / .13);
+  --blanc-bloc: rgb(255 255 255 / .04);
+  --blanc-ligne: rgb(255 255 255 / .03);
+  --blanc-survol: rgb(255 255 255 / .05);
+  --blanc-pilule: rgb(255 255 255 / .06);
+  --blanc-actif: rgb(255 255 255 / .1);
+  --blanc-selection: rgb(255 255 255 / .14);
+  --blanc-fantome: rgb(255 255 255 / .09);
+  --blanc-barre: rgb(255 255 255 / .85);
+  --blanc-repere: rgb(255 255 255 / .22);
+  --blanc-grille: rgb(255 255 255 / .06);
+  --blanc-serie: rgb(255 255 255 / .4);
+  --blanc-trait: rgb(255 255 255 / .5);
+  --blanc-halo: rgb(255 255 255 / .16);
+  --noir-ombre: rgb(0 0 0 / .35);
+  --voile: rgb(0 0 0 / .55);
+
+  /* dégradés */
+  --lueur: radial-gradient(50% 50% at 50% 50%, rgb(255 255 255 / .075) 0%, rgb(255 255 255 / .02) 50%, transparent 100%);
+  --reflet: linear-gradient(to bottom, rgb(255 255 255 / .035) 0%, rgb(255 255 255 / .005) 45%, transparent 100%);
+  --arete: linear-gradient(to bottom, rgb(255 255 255 / .1) 0%, transparent 12%);
+  --lavis: linear-gradient(to bottom, rgb(255 255 255 / .14), transparent);
+  --degrade-heros: linear-gradient(to bottom, var(--texte) 30%, rgb(255 255 255 / .52) 100%);
+  --ombre-verre: 0 18px 24px rgb(0 0 0 / .6);
+  --halo-actif: 0 0 8px var(--blanc-halo);
+  --halo-nav: 0 0 10px var(--blanc-halo);
+  --halo-heros: 0 0 28px var(--blanc-halo);
+  --halo-point: 4px;
+  --halo-barre: 0 0 9px rgb(255 255 255 / .75);
+  --contour-vise: 0 0 0 2px var(--fond);
+  --noir-compteur: rgb(0 0 0 / .1);
+
+  /* traits */
+  --trait: 2px;
+  --trait-case: 1.5px;
+  --filet: 1px;
+  --viseur: 1px;
+  --trait-icone: 1.7;
+
+  /* rayons */
+  --r-panneau: 20px;
+  --r-carte: 18px;
+  --r-bloc: 14px;
+  --r-bouton: 12px;
+  --r-tache: 11px;
+  --r-ligne: 10px;
+  --r-avatar: 8px;
+  --r-barre: 4px;
+  --r-legende: 3px;
+  --r-capsule: 999px;
+
+  /* espaces */
+  --e-xs: 2px;
+  --e-s: 4px;
+  --e-m: 8px;
+  --e-l: 10px;
+  --e-xl: 12px;
+  --e-xxl: 16px;
+  --e-panneau: 20px;
+  --e-page: 28px;
+  --e-pastille-h: 8px;
+  --e-pastille-v: 3px;
+  --e-bloc-haut: 18px;
+  --e-bloc-bas: 14px;
+  --e-segment: 3px;
+
+  /* tailles */
+  --t-barre-haut: 52px;
+  --t-feux: 78px;
+  --t-item-nav: 36px;
+  --t-avatar: 32px;
+  --t-avatar-mini: 26px;
+  --t-logo-mini: 12px;
+  --t-logo: 16px;
+  --t-logo-grand: 20px;
+  --t-bouton: 34px;
+  --t-segment: 30px;
+  --t-ligne-fil: 30px;
+  --t-ligne-video: 34px;
+  --t-ligne-tache: 38px;
+  --t-case-tache: 20px;
+  --t-sparkline-l: 76px;
+  --t-sparkline-h: 24px;
+  --t-barres-heure: 128px;
+  --t-graphique: 128px;
+  --t-graphique-haut: 170px;
+  --t-graphique-heros: 210px;
+  --t-point-courbe: 18px;
+  --t-icone: 17px;
+  --t-point: 7px;
+  --t-point-mini: 6px;
+  --t-palette: 600px;
+  --t-champ-palette: 54px;
+  --t-liste-palette: 380px;
+  --t-bulle: 300px;
+  --t-lueur: 680px;
+  --t-marque: 20px;
+  --t-panneau-reseau: 248px;
+  --t-panneau-plan: 280px;
+  --t-rail: 52px;
+  --t-radar: 156px;
+  --t-jauge: 6px;
+  --t-conversation: 460px;
+  --t-reponse: 88px;
+  --t-reglages-l: 600px;
+  --t-reglages-h: 640px;
+  --t-vide: 60px;
+  --t-legende: 8px;
+  --t-heure: 36px;
+  --t-heure-jour: 92px;
+  --t-tag: 50px;
+  --t-marge-palette: 110px;
+  --t-bouton-fenetre: 46px;
+  --t-menu: 220px;
+  --t-toast: 420px;
+  --t-marque-avatar: 62%;
+  --colonnes-videos: 26px minmax(0, 1fr) 44px 80px 70px 62px 62px 52px;
+  --e-compteur: 1px 7px;
+  --e-choix: 6px;
+  --e-item-nav: 14px;
+  --e-point-toast: 5px;
+
+  /* polices */
+  --police: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --police-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --f-titre: 600 30px/1.15 var(--police);
+  --f-h2: 600 15px/1.3 var(--police);
+  --f-kpi: 600 30px/1.1 var(--police);
+  --f-grand: 600 22px/1.2 var(--police);
+  --f-heros: 600 76px/1 var(--police);
+  --f-marque: 600 18px/1 var(--police);
+  --f-corps: 400 13.5px/1.4 var(--police);
+  --f-corps-gras: 600 13.5px/1.4 var(--police);
+  --f-ligne: 500 13.5px/1.3 var(--police);
+  --f-label: 600 12.5px/1.3 var(--police);
+  --f-petit: 400 12px/1.35 var(--police);
+  --f-mini: 400 11.5px/1.3 var(--police);
+  --f-mini-gras: 600 11.5px/1.3 var(--police);
+  --f-surtitre: 500 11px/1.2 var(--police-mono);
+  --f-tag: 500 10.5px/1.2 var(--police-mono);
+  --f-axe: 400 10.5px/1.2 var(--police-mono);
+  --f-coche: 800 9px/1 var(--police);
+  --f-lettre: 800 13.5px/1 var(--police);
+  --f-fleche: 700 10px/1 var(--police);
+  --f-symbole: 500 13px/1 var(--police);
+  --f-icone: 500 14px/1 var(--police);
+  --f-symbole-grand: 500 15px/1 var(--police);
+  --i-titre: -0.9px;
+  --i-kpi: -0.9px;
+  --i-heros: -3px;
+  --i-marque: -0.3px;
+  --i-surtitre: 1.5px;
+
+  /* animations : les ressorts SwiftUI échantillonnés en linear() */
+  --ressort-navigation: linear(0, 0.02, 0.07, 0.141, 0.223, 0.31, 0.398, 0.482, 0.561, 0.634, 0.699, 0.756, 0.805, 0.848, 0.884, 0.913, 0.937, 0.957, 0.972, 0.984, 0.993, 1, 1.005, 1.008, 1.01, 1.011, 1.011, 1.011, 1.01, 1.01, 1.009, 1.008, 1.007, 1.006, 1.005, 1.004, 1.003, 1.003, 1.002, 1.002, 1);
+  --duree-navigation: 603ms;
+  --ressort-chiffre: linear(0, 0.016, 0.059, 0.118, 0.187, 0.261, 0.337, 0.411, 0.481, 0.547, 0.608, 0.664, 0.713, 0.757, 0.796, 0.83, 0.859, 0.884, 0.905, 0.923, 0.938, 0.951, 0.961, 0.97, 0.977, 0.983, 0.987, 0.991, 0.994, 0.996, 0.998, 0.999, 1, 1.001, 1.001, 1.001, 1.001, 1.002, 1.002, 1.001, 1);
+  --duree-chiffre: 733ms;
+  --ressort-survol: linear(0, 0.027, 0.096, 0.191, 0.3, 0.413, 0.523, 0.625, 0.717, 0.796, 0.863, 0.917, 0.959, 0.992, 1.015, 1.031, 1.04, 1.045, 1.046, 1.044, 1.041, 1.036, 1.031, 1.026, 1.021, 1.016, 1.012, 1.009, 1.006, 1.003, 1.002, 1, 0.999, 0.998, 0.998, 0.998, 0.998, 0.998, 0.998, 0.998, 1);
+  --duree-survol: 393ms;
+  --ressort-entree: linear(0, 0.018, 0.066, 0.131, 0.208, 0.29, 0.373, 0.453, 0.529, 0.599, 0.663, 0.72, 0.77, 0.813, 0.85, 0.882, 0.908, 0.93, 0.948, 0.963, 0.974, 0.983, 0.99, 0.996, 0.999, 1.002, 1.004, 1.005, 1.006, 1.006, 1.006, 1.006, 1.006, 1.005, 1.005, 1.004, 1.004, 1.003, 1.003, 1.002, 1);
+  --duree-entree: 711ms;
+  --courbe-trace: cubic-bezier(0, 0, .58, 1);
+  --duree-trace: 900ms;
+  --duree-fondu: 250ms;
+  --duree-rotation: 1s;
+  --decalage: 50ms;
+  --decalage-barre: 12ms;
+  --rang-max: 8;
+  --appui: .96;
+  --appui-carte: .98;
+  --survol-echelle: 1.012;
+  --survol-lumiere: .025;
+  --glisse: 14px;
+  --flou: 8px;
+  --reduit: .98;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
