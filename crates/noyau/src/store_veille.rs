@@ -31,7 +31,7 @@ impl Store {
 
     /// Le mot n'est plus cherché ; ses vidéos restent.
     pub fn retirer_mot(&self, business: &str, mot: &str) -> Res<()> {
-        self.db.execute("delete from veille_mot where business = ? and mot = ?", p![business, mot])?;
+        self.db.execute("delete from veille_mot where business = ? and mot = ?", p![business, mot.trim()])?;
         Ok(())
     }
 

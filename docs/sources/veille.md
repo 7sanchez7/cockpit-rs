@@ -63,13 +63,13 @@ Seulement les outliers trouvés dans les 14 derniers jours sans analyse, les plu
 - Modèle : `claude-haiku-5-5` (`MODELE`), `thinking` désactivé, `effort: low`, 2 000 tokens de sortie au plus, délai de 120 s.
 - Claude ne lit pas la vidéo : on lui envoie **des images clés et ce qui est dit** (`extraits`). La vidéo vient de l'URL du fichier quand la page l'a donnée (Instagram, elle expire vite), sinon de `yt-dlp -f 'best[height<=720]/best'`, jusqu'à 3 essais car le CDN de TikTok rend parfois un 403 (`fichier`). Elle est gardée dans `<cache>/veille-videos/` (`analyse::videos()`, cache de [`chemins::cache()`](../architecture.md)), écrite en `.part` puis renommée. `ffmpeg` en tire 6 images en 480 px de haut (`moments` : 0,3, 1,5 et 3 s pour le hook, puis 35, 60 et 85 % de la durée lue par `ffprobe`, 30 s si elle manque), et `transcrire --langue auto --plat` le texte dit, coupé à 4 000 caractères ; sans `transcrire`, l'analyse se fait sur les images seules. Sans aucune image : « aucune image tirée de la vidéo ».
 - Réponse : `output_config.format` en `json_schema` (`schema`), lue par `lire` : un `stop_reason` autre que `end_turn` donne « Claude sans réponse », un `adaptable` hors de 0 à 3 est une erreur. Le champ `format` est l'un des formats de `<contenu_dir>/formats/INDEX.md` (lignes `| 3 | [nom](nom/) | …`, `formats_index`) ou « nouveau ».
-- **Coût et plafond** : chaque appel écrit ses tokens et son coût dans `veille_cout` (`Store::cout_veille`, 0,10 $ le million en entrée, 0,50 $ en sortie, `cout`) avant de lire la réponse. Au-delà de 50 $ cumulés (`PLAFOND_USD`, `Store::depense_veille_usd`), l'analyse s'arrête : « analyses arrêtées : N $ dépensés, plafond 50 $ ». `cockpit etat` affiche la dépense ([../cli.md](../cli.md)).
+- **Coût et plafond** : chaque appel écrit ses tokens et son coût dans `veille_cout` (`Store::cout_veille`, 0,10 $ le million en entrée, 0,50 $ en sortie, `cout`) avant de lire la réponse. Au-delà de 50 $ cumulés (`lecture::veille::PLAFOND_VEILLE_USD`, `Store::depense_veille_usd`), l'analyse s'arrête : « analyses arrêtées : N $ dépensés, plafond 50 $ ». `cockpit etat` affiche la dépense ([../cli.md](../cli.md)).
 
 `AnalyseVeille` (mêmes clés JSON que la version macOS, dans `veille_analyse`) : `hook` (mot pour mot), `hookType` (l'un des 16 `AnalyseVeille::HOOKS`), `hookVisuel` (l'un des 12 `VISUELS`), `texteEcran`, `probleme`, `format`, `blocs` (hook, confirmation, valeur, placement, fin), `ecart`, `adaptable` (0 à 3), `idee`.
 
 ## Les mots-clés
 
-`Store::ajouter_mot(business, mot, vues_min)` (le mot est rogné, un mot vide est ignoré, un mot existant est réactivé avec le nouveau seuil), `retirer_mot`, `activer_mot`. Aujourd'hui, seule la CLI les écrit : `cockpit veille mot ajoute` et `cockpit veille mot retire` ([../cli.md](../cli.md)). L'écran Veille n'est pas encore codé.
+`Store::ajouter_mot(business, mot, vues_min)` (le mot est rogné, un mot vide est ignoré, un mot existant est réactivé avec le nouveau seuil), `retirer_mot` (mot rogné aussi), `activer_mot`. Aujourd'hui, seule la CLI les écrit : `cockpit veille mot ajoute` et `cockpit veille mot retire` ([../cli.md](../cli.md)). L'écran Veille n'est pas encore codé.
 
 ## Ce qui peut casser
 
@@ -79,4 +79,4 @@ Seulement les outliers trouvés dans les 14 derniers jours sans analyse, les plu
 - yt-dlp ne lit plus les profils TikTok : le mettre à jour, l'erreur de chaque compte est dans le message du passage.
 - Instagram bloque l'adresse : la reprise de 3 h évite d'entretenir le blocage.
 - `ffmpeg`, `ffprobe` ou `yt-dlp` absent : l'analyse échoue, retentée au passage suivant ; `transcrire` absent : analyse sur les images.
-- Plafond de 50 $ atteint : le relever dans `PLAFOND_USD` seulement sur décision de l'utilisateur. Le même plafond est recopié dans `lecture::veille::PLAFOND_VEILLE_USD` pour la CLI : changer les deux.
+- Plafond de 50 $ atteint : le relever dans `lecture::veille::PLAFOND_VEILLE_USD` (lu par la source, la CLI et l'écran) seulement sur décision de l'utilisateur.

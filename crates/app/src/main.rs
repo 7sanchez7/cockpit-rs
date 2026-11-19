@@ -1,5 +1,5 @@
 //! Cockpit, l'app de bureau (Windows, Mac, Linux) : la fenêtre, le tray, la collecte en fond.
-//! L'interface est dans `ui/` ; elle ne parle qu'aux commandes de `commandes.rs` et de `ecrans.rs`, jamais au réseau.
+//! L'interface est dans `ui/` ; elle ne parle qu'aux commandes de `commandes.rs` et de `ecrans/`, jamais au réseau.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commandes;

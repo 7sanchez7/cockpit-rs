@@ -6,6 +6,7 @@ use crate::collecte::http::{Http, Requete, UA_NAVIGATEUR};
 use crate::collecte::{commande, Contexte};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::Date;
+use crate::lecture::veille::PLAFOND_VEILLE_USD;
 use crate::modeles_veille::{AnalyseVeille, VideoVeille};
 use crate::p;
 use base64::Engine;
@@ -19,7 +20,6 @@ pub const MODELE: &str = "claude-haiku-5-5";
 pub const PRIX_ENTREE_USD: f64 = 0.10;
 pub const PRIX_SORTIE_USD: f64 = 0.50;
 /// Au-delà, plus aucune analyse : 50 $ restent sous 50 €.
-pub const PLAFOND_USD: f64 = 50.0;
 /// Les secondes des images clés : le hook de près, puis le reste de la vidéo.
 pub const INSTANTS: [f64; 3] = [0.3, 1.5, 3.0];
 pub const SUITE: [f64; 3] = [0.35, 0.6, 0.85];
@@ -44,8 +44,8 @@ pub async fn analyser(ctx: &Contexte, maintenant: &Date) -> Vec<String> {
                 continue;
             }
         };
-        if depense >= PLAFOND_USD {
-            echecs.push(format!("analyses arrêtées : {} $ dépensés, plafond {} $", depense as i64, PLAFOND_USD as i64));
+        if depense >= PLAFOND_VEILLE_USD {
+            echecs.push(format!("analyses arrêtées : {} $ dépensés, plafond {} $", depense as i64, PLAFOND_VEILLE_USD as i64));
             return echecs;
         }
         let cle = match ctx.secrets.valeur(&b.config.claude, b).await {

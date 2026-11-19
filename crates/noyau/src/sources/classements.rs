@@ -90,7 +90,7 @@ impl Source for Classements {
                 continue;
             }
             let Some(sf) = storefront(code) else {
-                return Err(Erreur::NonConfigure(format!("pays {code} sans storefront connu, à ajouter à Classements.storefronts")));
+                return Err(Erreur::NonConfigure(format!("pays {code} sans storefront connu, à ajouter à `storefront` dans crates/noyau/src/sources/classements.rs")));
             };
             pays.push((code.clone(), sf));
         }

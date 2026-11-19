@@ -86,7 +86,7 @@ fn etat(store: &Store, l: &Lectures) -> Res<()> {
     println!("veille : {} mots actifs, {} vidéos sur 30 j, {} outliers", mots.iter().filter(|m| m.actif).count(),
              videos.len(), videos.iter().filter(|v| v.outlier()).count());
     let analyses = store.db.query("select count(*) as n from veille_cout", p![])?.first().and_then(|l| l.entier("n")).unwrap_or(0);
-    println!("analyses Claude : {analyses} appels, {:.3} $ sur {} $", store.depense_veille_usd()?, PLAFOND_VEILLE_USD as i64);
+    println!("analyses Claude : {analyses} appels, {} $ sur {} $", format::decimal(store.depense_veille_usd()?, 3), format::entier(PLAFOND_VEILLE_USD));
     println!("fil");
     for e in l.fil(None, None, 8)? { println!("  {} {} {}", age(Some(e.at)), e.type_.brut(), ligne(Some(&e.texte), 80)); }
     Ok(())
