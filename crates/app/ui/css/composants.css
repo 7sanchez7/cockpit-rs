@@ -1052,6 +1052,18 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 .pilule-mot.en-pause { color: var(--tertiaire); }
 .pilule-mot .nombre { font: var(--f-mini-gras); color: var(--secondaire); font-variant-numeric: tabular-nums; }
 .pilule-mot.ajout { gap: var(--e-s); color: var(--secondaire); }
+.pilule-mot.demande { gap: var(--e-s); color: var(--secondaire); }
+.pilule-mot.demande.choisie { color: var(--texte); }
+.pilule-mot.demande .libelle { max-width: var(--t-pilule-demande); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.champ-ajout.demande { width: var(--t-champ-demande); height: var(--t-champ-demande-h); padding: var(--e-l) var(--e-xl); resize: none; }
+.resume-demande { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-s); }
+.resume-demande .consigne { font: var(--f-corps-gras); color: var(--texte); user-select: text; }
+.resume-demande .note { font: var(--f-mini); color: var(--tertiaire); }
+.resume-demande .synthese { font: var(--f-petit); color: var(--secondaire); white-space: pre-line; user-select: text; }
+.resume-demande .erreur { font: var(--f-petit); color: var(--danger); user-select: text; }
+.panneau-demande .defile > .vide { padding: 0 var(--e-panneau); }
+.journal-demande { display: flex; flex-direction: column; gap: var(--e-xs); padding: var(--e-xxl) var(--e-panneau) 0; }
+.journal-demande .ligne { font: var(--f-mini); color: var(--tertiaire); font-variant-numeric: tabular-nums; user-select: text; }
 .voir-sur { font: var(--f-petit); color: var(--secondaire); }
 .voir-sur:hover { color: var(--texte); }
 .detail-veille { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--e-xl); overflow-y: auto; scrollbar-width: none; }

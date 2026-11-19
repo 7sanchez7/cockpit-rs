@@ -101,14 +101,18 @@ impl Collecteur {
     }
 
     /// Un passage complet : la collecte, son journal, puis les notifications. Rend le passage écrit.
-    pub async fn lancer(&self, s: &dyn Source) -> Option<Passage> {
-        if !self.en_cours.lock().insert(s.id().to_string()) {
+    pub async fn lancer(self: &Arc<Self>, s: &dyn Source) -> Option<Passage> {
+        let _r = self.reserver(s.id())?;
+        Some(self.passage(s).await)
+    }
+
+    /// Marque `id` en cours jusqu'à ce que la réservation tombe ; None s'il l'est déjà.
+    pub fn reserver(self: &Arc<Self>, id: &str) -> Option<Reservation> {
+        if !self.en_cours.lock().insert(id.to_string()) {
             return None;
         }
-        let p = self.passage(s).await;
-        self.en_cours.lock().remove(s.id());
         self.store.a_change();
-        Some(p)
+        Some(Reservation { collecteur: self.clone(), id: id.into() })
     }
 
     async fn passage(&self, s: &dyn Source) -> Passage {
@@ -168,6 +172,19 @@ impl Collecteur {
 }
 
 /// Une source est due quand sa cadence (ou son délai de reprise après un échec, s'il est plus court) est écoulée.
+/// Une source (ou une demande de veille) marquée en cours ; elle cesse de l'être quand la réservation tombe.
+pub struct Reservation {
+    collecteur: Arc<Collecteur>,
+    id: String,
+}
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        self.collecteur.en_cours.lock().remove(&self.id);
+        self.collecteur.store.a_change();
+    }
+}
+
 pub fn a_echeance(dernier: &Passage, cadence: i64, reprise: i64, maintenant: &Date) -> bool {
     let delai = if dernier.etat == EtatPassage::Ok { cadence } else { cadence.min(reprise) };
     dernier.debut + Duration::seconds(delai) <= *maintenant

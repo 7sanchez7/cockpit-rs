@@ -15,11 +15,24 @@ use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 
-pub const MODELE: &str = "claude-haiku-5-5";
-/// Prix de Haiku 5.5 en dollars par million de tokens, prompt sous 100 k tokens.
-pub const PRIX_ENTREE_USD: f64 = 0.10;
-pub const PRIX_SORTIE_USD: f64 = 0.50;
-/// Au-delà, plus aucune analyse : 50 $ restent sous 50 €.
+/// Le prix d'un modèle en dollars par million de tokens : entrée, sortie, cache écrit (5 min) et lu ; multiplié par
+/// `facteur_long` quand le prompt dépasse `long` tokens.
+pub struct Prix {
+    pub modele: &'static str,
+    pub entree: f64,
+    pub sortie: f64,
+    pub cache_ecrit: f64,
+    pub cache_lu: f64,
+    pub long: i64,
+    pub facteur_long: f64,
+}
+
+/// Haiku 5.5 : les analyses et la boucle d'une demande.
+pub const HAIKU: Prix =
+    Prix { modele: "claude-haiku-5-5", entree: 0.10, sortie: 0.50, cache_ecrit: 0.125, cache_lu: 0.01, long: 100_000, facteur_long: 5.0 };
+/// Sonnet 5.5 : les mots-clés d'une demande.
+pub const SONNET: Prix =
+    Prix { modele: "claude-sonnet-5-5", entree: 2.0, sortie: 10.0, cache_ecrit: 2.5, cache_lu: 0.10, long: i64::MAX, facteur_long: 1.0 };
 /// Les secondes des images clés : le hook de près, puis le reste de la vidéo.
 pub const INSTANTS: [f64; 3] = [0.3, 1.5, 3.0];
 pub const SUITE: [f64; 3] = [0.35, 0.6, 0.85];
@@ -70,17 +83,11 @@ pub fn a_analyser(videos: Vec<VideoVeille>) -> Vec<VideoVeille> {
     a_faire
 }
 
-async fn analyser_une(ctx: &Contexte, v: &VideoVeille, cle: &str, formats: &[String], maintenant: &Date) -> Res<()> {
+pub(crate) async fn analyser_une(ctx: &Contexte, v: &VideoVeille, cle: &str, formats: &[String], maintenant: &Date) -> Res<()> {
     let (images, transcription) = extraits(v, &ctx.http).await?;
-    let r = Requete::new("https://api.anthropic.com/v1/messages", "POST")
-        .entete("x-api-key", cle)
-        .entete("anthropic-version", "2023-06-01")
-        .delai(120)
-        .json(&corps(v, &images, &transcription, formats));
-    let o = ctx.http.objet(&r).await?;
-    let (entree, sortie) = usage(&o);
-    ctx.store.cout_veille(&v.id, maintenant, MODELE, entree, sortie, cout(entree, sortie))?;
-    ctx.store.analyse_veille(&v.id, maintenant, MODELE, &lire(&o)?)
+    let o = appeler(&ctx.http, cle, &corps(v, &images, &transcription, formats), 120).await?;
+    facturer(ctx, &v.id, &HAIKU, &o, maintenant)?;
+    ctx.store.analyse_veille(&v.id, maintenant, HAIKU.modele, &lire(&o)?)
 }
 
 // extraits
@@ -197,7 +204,7 @@ pub fn corps(v: &VideoVeille, images: &[Vec<u8>], transcription: &str, formats: 
     })).collect();
     contenu.push(json!({"type": "text", "text": consigne(v, transcription)}));
     json!({
-        "model": MODELE,
+        "model": HAIKU.modele,
         "max_tokens": 2_000,
         "thinking": {"type": "disabled"},
         "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": schema(formats)}},
@@ -205,24 +212,65 @@ pub fn corps(v: &VideoVeille, images: &[Vec<u8>], transcription: &str, formats: 
     })
 }
 
-/// Les tokens facturés : (entrée, sortie).
-pub fn usage(o: &Map<String, Value>) -> (i64, i64) {
-    let u = o.get("usage");
-    let n = |cle: &str| u.and_then(|u| u.get(cle)).and_then(Value::as_i64).unwrap_or(0);
-    (n("input_tokens"), n("output_tokens"))
+/// Un appel à l'API Messages ; rend la réponse entière.
+pub async fn appeler(http: &Http, cle: &str, corps: &Value, delai: u64) -> Res<Map<String, Value>> {
+    let r = Requete::new("https://api.anthropic.com/v1/messages", "POST")
+        .entete("x-api-key", cle)
+        .entete("anthropic-version", "2023-06-01")
+        .delai(delai)
+        .json(corps);
+    http.objet(&r).await
 }
 
-pub fn cout(entree: i64, sortie: i64) -> f64 { (entree as f64 * PRIX_ENTREE_USD + sortie as f64 * PRIX_SORTIE_USD) / 1_000_000.0 }
+/// Les tokens d'un appel : entrée hors cache, écrits dans le cache, lus dans le cache, sortie.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Usage {
+    pub entree: i64,
+    pub cache_ecrit: i64,
+    pub cache_lu: i64,
+    pub sortie: i64,
+}
+
+impl Usage {
+    pub fn de(o: &Map<String, Value>) -> Usage {
+        let u = o.get("usage");
+        let n = |cle: &str| u.and_then(|u| u.get(cle)).and_then(Value::as_i64).unwrap_or(0);
+        Usage { entree: n("input_tokens"), cache_ecrit: n("cache_creation_input_tokens"), cache_lu: n("cache_read_input_tokens"),
+                sortie: n("output_tokens") }
+    }
+
+    /// Tout le prompt, cache compris : la colonne `entree` de `veille_cout`.
+    pub fn prompt(&self) -> i64 { self.entree + self.cache_ecrit + self.cache_lu }
+
+    pub fn usd(&self, p: &Prix) -> f64 {
+        let f = if self.prompt() > p.long { p.facteur_long } else { 1.0 };
+        let n = self.entree as f64 * p.entree + self.cache_ecrit as f64 * p.cache_ecrit + self.cache_lu as f64 * p.cache_lu
+            + self.sortie as f64 * p.sortie;
+        n * f / 1_000_000.0
+    }
+}
+
+/// Écrit le coût d'un appel au nom de `objet` (une vidéo, ou `demande:<id>`).
+pub fn facturer(ctx: &Contexte, objet: &str, p: &Prix, o: &Map<String, Value>, at: &Date) -> Res<()> {
+    let u = Usage::de(o);
+    ctx.store.cout_veille(objet, at, p.modele, u.prompt(), u.sortie, u.usd(p))
+}
+
+/// Le texte d'une réponse finie (les blocs de texte mis bout à bout) ; une erreur si Claude a refusé ou a été coupé.
+pub fn texte(o: &Map<String, Value>) -> Res<String> {
+    let arret = o.get("stop_reason").and_then(Value::as_str).unwrap_or("aucun");
+    let texte: String = o.get("content").and_then(Value::as_array).into_iter().flatten()
+        .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
+        .filter_map(|b| b.get("text")?.as_str()).collect();
+    if arret != "end_turn" || texte.is_empty() {
+        return Err(format_err(format!("Claude sans réponse ({arret})")));
+    }
+    Ok(texte)
+}
 
 pub fn lire(o: &Map<String, Value>) -> Res<AnalyseVeille> {
-    let arret = o.get("stop_reason").and_then(Value::as_str).unwrap_or("aucun");
-    let texte = o.get("content").and_then(Value::as_array)
-        .and_then(|c| c.iter().find(|b| b.get("type").and_then(Value::as_str) == Some("text")))
-        .and_then(|b| b.get("text")?.as_str());
-    let Some(texte) = texte.filter(|_| arret == "end_turn") else {
-        return Err(format_err(format!("Claude sans réponse ({arret})")));
-    };
-    let a: AnalyseVeille = serde_json::from_str(texte).map_err(|e| format_err(format!("analyse illisible : {e}")))?;
+    let texte = texte(o)?;
+    let a: AnalyseVeille = serde_json::from_str(&texte).map_err(|e| format_err(format!("analyse illisible : {e}")))?;
     if !(0..=3).contains(&a.adaptable) {
         return Err(format_err(format!("analyse : adaptable = {}", a.adaptable)));
     }
@@ -338,7 +386,14 @@ pub mod tests {
 
     #[test]
     fn cout_et_schema() {
-        assert!((cout(1_000_000, 1_000_000) - 0.60).abs() < 1e-9);
+        let u = Usage { entree: 50_000, cache_ecrit: 0, cache_lu: 0, sortie: 100_000 };
+        assert!((u.usd(&HAIKU) - 0.055).abs() < 1e-12);
+        assert!((u.usd(&SONNET) - 1.1).abs() < 1e-12);
+        // le cache lu coûte un dixième de l'entrée sur Haiku ; au-delà de 100 k tokens de prompt, tout coûte 5 fois plus
+        let cache = Usage { entree: 1_000, cache_ecrit: 2_000, cache_lu: 50_000, sortie: 500 };
+        assert!((cache.usd(&HAIKU) - (100.0 + 250.0 + 500.0 + 250.0) / 1e6).abs() < 1e-12);
+        let long = Usage { entree: 120_000, cache_ecrit: 0, cache_lu: 0, sortie: 0 };
+        assert!((long.usd(&HAIKU) - 0.06).abs() < 1e-12);
         let s = schema(&["4-erreurs".into()]);
         assert_eq!(s["additionalProperties"], false);
         let blocs = &s["properties"]["blocs"];
@@ -352,10 +407,12 @@ pub mod tests {
         let texte = serde_json::to_string(&analyse()).unwrap();
         let reponse = |texte: &str, arret: &str| -> Map<String, Value> {
             serde_json::from_value(json!({"stop_reason": arret, "content": [{"type": "text", "text": texte}],
-                                          "usage": {"input_tokens": 3_900, "output_tokens": 700}})).unwrap()
+                                          "usage": {"input_tokens": 3_900, "output_tokens": 700,
+                                                    "cache_read_input_tokens": 100}})).unwrap()
         };
         assert_eq!(lire(&reponse(&texte, "end_turn")).unwrap(), analyse());
-        assert_eq!(usage(&reponse(&texte, "end_turn")), (3_900, 700));
+        assert_eq!(Usage::de(&reponse(&texte, "end_turn")), Usage { entree: 3_900, cache_ecrit: 0, cache_lu: 100, sortie: 700 });
+        assert_eq!(Usage::de(&reponse(&texte, "end_turn")).prompt(), 4_000);
         assert!(lire(&reponse(&texte, "refusal")).is_err());
         assert!(lire(&reponse(&texte, "max_tokens")).is_err());
         assert!(lire(&reponse("{}", "end_turn")).is_err());

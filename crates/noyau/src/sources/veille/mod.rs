@@ -1,5 +1,6 @@
 //! Les vidéos qui ont marché sur des mots-clés, sur TikTok et Instagram. Voir docs/sources/veille.md.
 pub mod analyse;
+pub mod demande;
 pub mod parseurs;
 
 use crate::collecte::http::encoder;
@@ -34,11 +35,14 @@ const VIDEOS_PAR_DEFILEMENT: i64 = 5;
 pub const PAUSE: (f64, f64) = (20.0, 40.0);
 pub const PLATEFORMES: [Plateforme; 2] = [Plateforme::Tiktok, Plateforme::Instagram];
 
+/// L'id de la source, que réserve aussi une demande à Claude : l'une attend que l'autre ait fini.
+pub const ID: &str = "veille";
+
 pub struct Veille;
 
 #[async_trait]
 impl Source for Veille {
-    fn id(&self) -> &'static str { "veille" }
+    fn id(&self) -> &'static str { ID }
     fn nom(&self) -> &'static str { "Veille" }
     fn cadence(&self) -> i64 { 6 * 3_600 }
     fn reprise(&self) -> i64 { 3 * 3_600 }
@@ -366,10 +370,10 @@ mod tests {
         assert_eq!(store.comptes_a_baser(Plateforme::Tiktok, 8, &(t0() + Duration::days(8))).unwrap(), ["profe.ana"]);
 
         let a = analyse::tests::analyse();
-        store.analyse_veille(&v.id, &t0(), analyse::MODELE, &a).unwrap();
+        store.analyse_veille(&v.id, &t0(), analyse::HAIKU.modele, &a).unwrap();
         assert_eq!(store.videos_veille("", p![]).unwrap()[0].analyse, Some(a));
         for _ in 0..2 {
-            store.cout_veille(&v.id, &t0(), analyse::MODELE, 4_000, 800, analyse::cout(4_000, 800)).unwrap();
+            store.cout_veille(&v.id, &t0(), analyse::HAIKU.modele, 4_000, 800, 0.0008).unwrap();
         }
         assert!((store.depense_veille_usd().unwrap() - 0.0016).abs() < 1e-9);
     }

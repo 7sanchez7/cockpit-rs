@@ -57,7 +57,7 @@ export function popover(ancre, contenu) {
   el.append(contenu(() => fermer()));
   fermer = flottant(el, r.left, r.bottom + nombreJeton("--e-m"));
   el.style.left = Math.max(nombreJeton("--e-m"), Math.min(r.left + r.width / 2 - el.offsetWidth / 2, innerWidth - el.offsetWidth - nombreJeton("--e-m"))) + "px";
-  el.querySelector("input")?.focus();
+  el.querySelector("input, textarea")?.focus();
 }
 
 /** Le business d'un ajout : un menu s'il y en a plusieurs ; `choisir(id)` reçoit le choix. */

@@ -220,6 +220,9 @@
   --t-compteur: 128px;
   --t-champ: 240px;
   --t-champ-seuil: 90px;
+  --t-champ-demande: 380px;
+  --t-champ-demande-h: 96px;
+  --t-pilule-demande: 220px;
   --contour-choisi: 1.5px;
   --t-nom-part: 112px;
   --t-valeur-part: 40px;

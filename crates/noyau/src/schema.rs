@@ -99,6 +99,12 @@ create table if not exists veille_analyse (video text primary key, at text not n
 create table if not exists veille_cout (
     video text not null, at text not null, modele text not null, entree integer not null, sortie integer not null,
     usd real not null);
+create table if not exists veille_demande (
+    id text primary key, business text not null, prompt text not null, debut text not null, fin text,
+    etat text not null, journal text not null default '[]', synthese text, erreur text);
+create table if not exists veille_retenue (
+    demande text not null, video text not null, raison text not null, ordre integer not null,
+    primary key (demande, video));
 create table if not exists reglage (cle text primary key, valeur text not null);
 create table if not exists plan (
     ordre integer primary key, section text not null, texte text not null, coche integer not null default 0,

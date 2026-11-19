@@ -267,7 +267,7 @@ L'arbre des installs de l'écran Data. PostHog réécrit `install` et `porte` au
 | `business`, `jour`, `porte` | jour à Paris et porte du paywall (`properties.source` de l'événement `paywall`, vide pour les anciennes versions) |
 | `vues`, `essais`, `directs` | paywalls vus, essais gratuits, achats sans essai |
 
-### `veille_mot`, `veille_compte`, `veille_video`, `veille_releve`, `veille_analyse` et `veille_cout`
+### `veille_mot`, `veille_compte`, `veille_video`, `veille_releve`, `veille_analyse`, `veille_cout`, `veille_demande` et `veille_retenue`
 
 La veille par mots-clés, à part des tables `compte` et `video` : les comptes trouvés ne sont pas suivis, leurs vidéos ne sont pas les nôtres. Écrite par la source Veille ([`sources/veille.md`](sources/veille.md)), par `crates/noyau/src/store_veille.rs`, les modèles dans `crates/noyau/src/modeles_veille.rs`.
 
@@ -309,9 +309,26 @@ Retirer un mot supprime sa ligne seulement : ses vidéos restent.
 
 | `veille_cout` | Contenu |
 |---|---|
-| `video`, `at`, `modele` | un appel Claude, réussi ou non (`cout_veille`) |
-| `entree`, `sortie` | tokens facturés |
-| `usd` | coût de l'appel ; `depense_veille_usd` en fait la somme |
+| `video`, `at`, `modele` | un appel Claude, réussi ou non (`cout_veille`) ; `video` vaut `demande:<id>` pour les appels d'une demande à Claude (mots-clés de Sonnet, tours de Haiku) |
+| `entree`, `sortie` | tokens facturés ; `entree` compte tout le prompt, cache écrit et lu compris |
+| `usd` | coût de l'appel, au prix de chaque sorte de token (`Usage::usd`) ; `depense_veille_usd` en fait la somme |
+
+Une demande à Claude depuis l'écran Veille ([`sources/veille.md`](sources/veille.md) § La demande). Ces deux tables n'existent que dans la version Rust : l'app Swift les ignore.
+
+| `veille_demande` | Contenu |
+|---|---|
+| `id` | UUID en majuscules |
+| `business`, `prompt` | le business choisi et la consigne, 2 000 caractères au plus |
+| `debut`, `fin` | ISO UTC ; `fin` nulle tant qu'elle tourne |
+| `etat` | `en_cours`, `finie` ou `echouee` ; créer une demande passe celle restée `en_cours` en `echouee`, erreur « interrompue » (`nouvelle_demande`) |
+| `journal` | tableau JSON de lignes, une par étape (`noter_demande`) |
+| `synthese`, `erreur` | la synthèse de Haiku, ou ce qui l'a arrêtée (`finir_demande`) |
+
+| `veille_retenue` | Contenu |
+|---|---|
+| `demande`, `video` | clé primaire ; `video` est un `veille_video.id` (`retenir_video`) |
+| `raison` | pourquoi Claude l'a gardée ; la garder de nouveau la remplace |
+| `ordre` | rang de la première fois où elle est gardée, à partir de 0 |
 
 ### `collecte`
 

@@ -68,6 +68,35 @@ impl MotVeille {
     pub fn id(&self) -> String { format!("{}:{}", self.business, self.mot) }
 }
 
+/// Une demande libre à Claude : Sonnet choisit les mots-clés, Haiku cherche, analyse et retient les vidéos.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DemandeVeille {
+    pub id: String,
+    pub business: String,
+    pub prompt: String,
+    pub debut: Date,
+    pub fin: Option<Date>,
+    pub etat: String,
+    pub journal: Vec<String>,
+    pub synthese: Option<String>,
+    pub erreur: Option<String>,
+}
+
+impl DemandeVeille {
+    pub const EN_COURS: &'static str = "en_cours";
+    pub const FINIE: &'static str = "finie";
+    pub const ECHOUEE: &'static str = "echouee";
+
+    pub fn depuis_ligne(l: &Ligne) -> Option<DemandeVeille> {
+        Some(DemandeVeille {
+            id: l.texte("id")?, business: l.texte("business")?, prompt: l.texte("prompt")?, debut: l.date("debut")?,
+            fin: l.date("fin"), etat: l.texte("etat")?,
+            journal: l.texte("journal").and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default(),
+            synthese: l.texte("synthese"), erreur: l.texte("erreur"),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct VideoVeille {
     pub id: String,

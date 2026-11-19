@@ -1,7 +1,7 @@
 //! La veille des business affichés (docs/sources/veille.md) : l'écran Veille et la CLI.
 use super::Lectures;
 use crate::erreur::Res;
-use crate::modeles_veille::{MotVeille, VideoVeille};
+use crate::modeles_veille::{DemandeVeille, MotVeille, VideoVeille};
 use crate::p;
 use chrono::Duration;
 use serde::Serialize;
@@ -36,6 +36,27 @@ impl Lectures<'_> {
         let sql = format!("{} where v.business in {} and v.trouvee >= ? order by v.trouvee desc", VideoVeille::SQL, self.dans());
         let depuis = self.maintenant - Duration::seconds(jours * 86_400);
         Ok(self.q(&sql, self.autour(p![], p![depuis]))?.iter().filter_map(VideoVeille::depuis_ligne).collect())
+    }
+
+    /// La dernière demande à Claude des business affichés.
+    pub fn demande_veille(&self) -> Res<Option<DemandeVeille>> {
+        let sql = format!("select * from veille_demande where business in {} order by debut desc, rowid desc limit 1", self.dans());
+        Ok(self.q(&sql, self.ids())?.first().and_then(DemandeVeille::depuis_ligne))
+    }
+
+    /// Les vidéos qu'une demande a gardées, dans l'ordre, avec la raison donnée par Claude.
+    pub fn retenues_veille(&self, demande: &str) -> Res<Vec<(VideoVeille, String)>> {
+        let sql = format!("select x.*, t.raison from ({}) x join veille_retenue t on t.video = x.id where t.demande = ? order by t.ordre",
+            VideoVeille::SQL);
+        Ok(self.q(&sql, p![demande])?.iter().filter_map(|l| Some((VideoVeille::depuis_ligne(l)?, l.texte("raison")?))).collect())
+    }
+
+    /// Ce qu'a coûté une demande, en dollars : ses appels et les analyses faites pendant qu'elle tournait (la veille
+    /// régulière attend qu'elle finisse).
+    pub fn cout_demande(&self, d: &DemandeVeille) -> Res<f64> {
+        let fin = d.fin.unwrap_or(self.maintenant);
+        Ok(self.q("select coalesce(sum(usd), 0) as t from veille_cout where at >= ? and at <= ?", p![d.debut, fin])?
+            .first().and_then(|l| l.nombre("t")).unwrap_or(0.0))
     }
 
     /// Les types de hook des vidéos analysées sur 30 jours, du plus fréquent au moins fréquent.

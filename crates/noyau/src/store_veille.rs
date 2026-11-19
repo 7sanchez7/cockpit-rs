@@ -104,14 +104,56 @@ impl Store {
         Ok(())
     }
 
-    /// Un appel d'analyse facturé, écrit même quand sa réponse est illisible.
+    /// Un appel à Claude facturé (analyse d'une vidéo, ou `demande:<id>`), écrit même quand sa réponse est illisible.
     pub fn cout_veille(&self, video: &str, at: &Date, modele: &str, entree: i64, sortie: i64, usd: f64) -> Res<()> {
         self.db.execute("insert into veille_cout (video, at, modele, entree, sortie, usd) values (?, ?, ?, ?, ?, ?)",
             p![video, at, modele, entree, sortie, usd])?;
         Ok(())
     }
 
-    /// Le total dépensé en analyses, en dollars.
+    // demandes à Claude
+
+    /// Une demande qui commence ; celles restées en cours (app quittée en route) passent en échec.
+    pub fn nouvelle_demande(&self, d: &DemandeVeille) -> Res<()> {
+        self.db.execute("update veille_demande set etat = ?, fin = ?, erreur = 'interrompue' where etat = ?",
+            p![DemandeVeille::ECHOUEE, d.debut, DemandeVeille::EN_COURS])?;
+        self.db.execute("insert into veille_demande (id, business, prompt, debut, etat) values (?, ?, ?, ?, ?)",
+            p![&d.id, &d.business, &d.prompt, d.debut, &d.etat])?;
+        Ok(())
+    }
+
+    pub fn demande_veille(&self, id: &str) -> Res<Option<DemandeVeille>> {
+        Ok(self.db.query("select * from veille_demande where id = ?", p![id])?.first().and_then(DemandeVeille::depuis_ligne))
+    }
+
+    /// Une ligne de plus au journal d'une demande.
+    pub fn noter_demande(&self, id: &str, ligne: &str) -> Res<()> {
+        self.db.execute("update veille_demande set journal = json_insert(journal, '$[#]', ?) where id = ?", p![ligne, id])?;
+        Ok(())
+    }
+
+    /// La fin d'une demande : sa synthèse, ou son erreur.
+    pub fn finir_demande(&self, id: &str, fin: &Date, r: Result<&str, &str>) -> Res<()> {
+        let (etat, synthese, erreur) = match r {
+            Ok(s) => (DemandeVeille::FINIE, Some(s), None),
+            Err(e) => (DemandeVeille::ECHOUEE, None, Some(e)),
+        };
+        self.db.execute("update veille_demande set fin = ?, etat = ?, synthese = ?, erreur = ? where id = ?",
+            p![fin, etat, synthese, erreur, id])?;
+        Ok(())
+    }
+
+    /// Une vidéo gardée pour une demande, à la suite des autres ; la garder de nouveau change sa raison.
+    pub fn retenir_video(&self, demande: &str, video: &str, raison: &str) -> Res<()> {
+        self.db.execute("
+            insert into veille_retenue (demande, video, raison, ordre)
+            values (?, ?, ?, (select count(*) from veille_retenue where demande = ?))
+            on conflict (demande, video) do update set raison = excluded.raison",
+            p![demande, video, raison, demande])?;
+        Ok(())
+    }
+
+    /// Le total dépensé en appels à Claude, en dollars.
     pub fn depense_veille_usd(&self) -> Res<f64> {
         Ok(self.db.query("select coalesce(sum(usd), 0) as t from veille_cout", p![])?.first().and_then(|l| l.nombre("t")).unwrap_or(0.0))
     }

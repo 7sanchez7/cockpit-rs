@@ -7,9 +7,9 @@ use noyau::collecte::miniatures;
 use noyau::jour::Date;
 use noyau::lecture::format;
 use noyau::modeles::Plateforme;
-use noyau::modeles_veille::{AnalyseVeille, MotVeille, VideoVeille};
+use noyau::modeles_veille::{AnalyseVeille, DemandeVeille, MotVeille, VideoVeille};
 use noyau::p;
-use noyau::sources::veille::{analyse, videos_par_mot, PLATEFORMES, REGLAGE_VIDEOS, VIDEOS_MAX, VIDEOS_MIN, VIDEOS_PAS};
+use noyau::sources::veille::{analyse, demande, videos_par_mot, ID, PLATEFORMES, REGLAGE_VIDEOS, VIDEOS_MAX, VIDEOS_MIN, VIDEOS_PAS};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -34,6 +34,29 @@ pub struct EcranVeille {
     choisie: Option<String>,
     detail: Option<DetailVeille>,
     curseur: Curseur,
+    /// La dernière demande à Claude du business, au-dessus de la grille.
+    demande: Option<DemandeEcran>,
+    prompt_max: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DemandeEcran {
+    prompt: String,
+    /// en_cours, finie ou echouee.
+    etat: &'static str,
+    /// « il y a 3 min, 0,04 $ ».
+    meta: String,
+    journal: Vec<String>,
+    synthese: Option<String>,
+    erreur: Option<String>,
+    retenues: Vec<Retenue>,
+}
+
+#[derive(Serialize)]
+pub struct Retenue {
+    case: CaseVeille,
+    raison: String,
 }
 
 /// Les vidéos gardées par mot-clé à chaque passage.
@@ -149,7 +172,14 @@ pub async fn veille(
         .filter(|v| mot.is_none() || v.mot == mot)
         .collect();
     trier(&mut liste, tri);
-    let choisie = choisie.filter(|id| liste.iter().any(|v| &v.id == id)).or_else(|| liste.first().map(|v| v.id.clone()));
+    let demande = l.demande_veille().map_err(texte)?;
+    let retenues = match &demande {
+        Some(d) => l.retenues_veille(&d.id).map_err(texte)?,
+        None => vec![],
+    };
+    // le détail montre aussi une vidéo retenue hors de la grille (plus vieille que 30 j, sous les filtres)
+    let montrables = || liste.iter().copied().chain(retenues.iter().map(|(v, _)| v));
+    let choisie = choisie.filter(|id| montrables().any(|v| &v.id == id)).or_else(|| liste.first().map(|v| v.id.clone()));
     Ok(EcranVeille {
         sous_titre: sous_titre(&mots, &toutes, &m),
         mots: mots.iter().map(|w| pilule(w, &toutes, &m)).collect(),
@@ -158,10 +188,51 @@ pub async fn veille(
         mot,
         videos: liste.iter().map(|v| case(v, tri, &m)).collect(),
         sans_mot: mots.is_empty(),
-        detail: liste.iter().find(|v| Some(&v.id) == choisie.as_ref()).map(|v| detail(v, &m)),
+        detail: montrables().find(|v| Some(&v.id) == choisie.as_ref()).map(|v| detail(v, &m)),
         choisie,
         curseur: Curseur { min: VIDEOS_MIN, max: VIDEOS_MAX, pas: VIDEOS_PAS, valeur: videos_par_mot(&etat.store).map_err(texte)? },
+        demande: match demande {
+            Some(d) => {
+                let cout = l.cout_demande(&d).map_err(texte)?;
+                let retenues = retenues.iter().map(|(v, raison)| Retenue { case: case(v, tri, &m), raison: raison.clone() }).collect();
+                Some(demande_ecran(d, etat.collecteur.en_cours().contains(ID), cout, retenues, &m))
+            }
+            None => None,
+        },
+        prompt_max: demande::PROMPT_MAX,
     })
+}
+
+/// Demande à Claude des vidéos en fond : Sonnet choisit les mots-clés, Haiku cherche, analyse et retient. Elle
+/// réserve la veille, comme un passage.
+#[tauri::command]
+pub async fn demander_veille(etat: State<'_, Etat>, business: String, prompt: String) -> Rep<()> {
+    let reservation = etat.collecteur.reserver(ID).ok_or("La veille tourne déjà, réessaie quand elle a fini.")?;
+    let ctx = etat.collecteur.contexte().map_err(texte)?;
+    let d = demande::creer(&etat.store, &business, &prompt).map_err(texte)?;
+    tauri::async_runtime::spawn(async move {
+        demande::mener(&ctx, &d).await;
+        drop(reservation);
+    });
+    Ok(())
+}
+
+/// Une demande en cours que plus rien ne mène (app quittée en route) se lit interrompue.
+fn demande_ecran(d: DemandeVeille, menee: bool, cout: f64, retenues: Vec<Retenue>, m: &Date) -> DemandeEcran {
+    let perdue = d.etat == DemandeVeille::EN_COURS && !menee;
+    DemandeEcran {
+        etat: match d.etat.as_str() {
+            DemandeVeille::EN_COURS if !perdue => DemandeVeille::EN_COURS,
+            DemandeVeille::FINIE => DemandeVeille::FINIE,
+            _ => DemandeVeille::ECHOUEE,
+        },
+        meta: format!("{}, {} $", format::majuscule(&format::il_ya(&d.debut, m)), format::decimal(cout, 2)),
+        erreur: if perdue { Some("interrompue".into()) } else { d.erreur },
+        prompt: d.prompt,
+        journal: d.journal,
+        synthese: d.synthese,
+        retenues,
+    }
 }
 
 /// Le curseur : lu au début du passage suivant.
