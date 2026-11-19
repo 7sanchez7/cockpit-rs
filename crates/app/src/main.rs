@@ -11,7 +11,9 @@ use noyau::collecte::collecteur::Collecteur;
 use noyau::store::Store;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{Emitter, Manager, RunEvent, WindowEvent};
+#[cfg(target_os = "macos")]
+use tauri::RunEvent;
+use tauri::{Emitter, Manager, WindowEvent};
 
 /// Ce que partagent les commandes.
 pub struct Etat {
@@ -74,9 +76,11 @@ fn main() {
             eprintln!("Cockpit ne démarre pas : {e}");
             std::process::exit(1);
         })
-        .run(|app, e| {
-            if let RunEvent::Reopen { .. } = e {
-                tray::montrer(app);
+        .run(|_app, _e| {
+            // le clic sur l'icône du Dock (Mac) ; ailleurs, c'est le tray qui remontre la fenêtre
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen { .. } = _e {
+                tray::montrer(_app);
             }
         });
 }
