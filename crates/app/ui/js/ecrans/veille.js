@@ -208,9 +208,31 @@ function detail(d, ctx) {
   );
 }
 
-function outils(ctx) {
-  if (ctx.enCours.includes("veille")) return h("span", { class: "passage tourne" }, icone("relancer"), "Passage en cours");
-  return pilule("Lancer maintenant", () => ctx.appeler("relancer", { source: "veille" }), { icone: "relancer" });
+/** Les vidéos gardées par mot-clé et par plateforme ; le passage suivant les lit. */
+function curseur(c, ctx) {
+  const valeur = h("span", { class: "valeur" }, c.valeur);
+  const remplir = () => champ.style.setProperty("--rempli", `${((champ.value - c.min) / (c.max - c.min)) * 100}%`);
+  const champ = h("input", {
+    type: "range",
+    min: c.min,
+    max: c.max,
+    step: c.pas,
+    value: c.valeur,
+    oninput: () => {
+      valeur.textContent = champ.value;
+      remplir();
+    },
+    onchange: () => ctx.appeler("regler_videos", { nombre: Number(champ.value) }),
+  });
+  remplir();
+  return h("label", { class: "curseur", title: "Vidéos gardées par mot-clé et par plateforme à chaque passage, les plus récentes d'abord" }, "Vidéos par mot-clé", champ, valeur);
+}
+
+function outils(d, ctx) {
+  const lancer = ctx.enCours.includes("veille")
+    ? h("span", { class: "passage tourne" }, icone("relancer"), "Passage en cours")
+    : pilule("Lancer maintenant", () => ctx.appeler("relancer", { source: "veille" }), { icone: "relancer" });
+  return [curseur(d.curseur, ctx), lancer];
 }
 
 const ecran = {
@@ -222,7 +244,7 @@ const ecran = {
     dernier = { racine, ctx };
     const d = await ctx.appeler("veille", { business: ctx.business, tri: etat.tri, plateforme: etat.plateforme, outliers: etat.outliers, mot: etat.mot, choisie: etat.choisie });
     ctx.page.sousTitre(d.sousTitre);
-    ctx.page.outils(outils(ctx));
+    ctx.page.outils(...outils(d, ctx));
     const colonnes = rangee([2, 1], [panneauVeille(d, ctx), detail(d, ctx)]);
     colonnes.classList.add("remplit");
     remplacer(racine, rangeeMots(d, ctx), colonnes);

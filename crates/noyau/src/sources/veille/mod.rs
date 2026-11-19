@@ -9,6 +9,7 @@ use crate::jour::{self, Date};
 use crate::modeles::{Evenement, Plateforme, TypeFil};
 use crate::modeles_veille::{MotVeille, ScoreVeille, Trouvaille, VideoVeille};
 use crate::p;
+use crate::store::Store;
 use async_trait::async_trait;
 use chrono::Duration;
 use std::collections::{HashMap, HashSet};
@@ -20,11 +21,15 @@ pub const MOTS_PAR_PASSAGE: usize = 4;
 pub const COMPTES_PAR_PASSAGE: i64 = 8;
 /// Les analyses Claude par passage, les plus récentes d'abord : 40 par jour au plus.
 pub const ANALYSES_PAR_PASSAGE: usize = 10;
-/// Les défilements d'une page de recherche : ni TikTok ni Instagram ne trient par date sur le web, on va chercher
-/// plus loin pour remonter assez de vidéos récentes.
-pub const DEFILEMENTS_RECHERCHE: u32 = 8;
-/// Au-delà, une vidéo trouvée par la recherche est écartée : la veille dit ce qui marche maintenant.
-pub const RECENTE_JOURS: i64 = 30;
+/// Le curseur de l'écran Veille : les vidéos gardées par mot-clé et par plateforme, les plus récentes d'abord.
+pub const REGLAGE_VIDEOS: &str = "veille.videos";
+pub const VIDEOS_MIN: i64 = 10;
+pub const VIDEOS_MAX: i64 = 100;
+pub const VIDEOS_PAS: i64 = 10;
+pub const VIDEOS_DEFAUT: i64 = 40;
+/// Les vidéos voulues par défilement de la recherche : ni TikTok ni Instagram ne trient par date sur le web, on lit
+/// une douzaine de vidéos par défilement pour en garder les plus récentes.
+const VIDEOS_PAR_DEFILEMENT: i64 = 5;
 /// La pause entre deux pages, en secondes : un humain qui cherche, pas une rafale.
 pub const PAUSE: (f64, f64) = (20.0, 40.0);
 pub const PLATEFORMES: [Plateforme; 2] = [Plateforme::Tiktok, Plateforme::Instagram];
@@ -48,9 +53,10 @@ impl Source for Veille {
         }
         mots.sort_by_key(|m| m.cherche.unwrap_or_else(jour::loin_passe));
         let a_chercher = &mots[..mots.len().min(MOTS_PAR_PASSAGE)];
+        let voulues = videos_par_mot(store)?;
 
         // TikTok et Instagram en même temps : deux sites, chacun à son rythme, le passage dure le plus long des deux
-        let bilans = futures::future::join_all(PLATEFORMES.map(|p| passer(ctx, p, a_chercher, &maintenant))).await;
+        let bilans = futures::future::join_all(PLATEFORMES.map(|p| passer(ctx, p, a_chercher, voulues, &maintenant))).await;
         let mut echecs: Vec<String> = bilans.iter().flat_map(|b| b.echecs.clone()).collect();
         let lignes = bilans.iter().map(|b| b.lignes).sum();
         let mut images: HashMap<String, String> = HashMap::new();
@@ -91,8 +97,13 @@ pub struct Bilan {
     pub echecs: Vec<String>,
 }
 
+/// Le curseur de l'écran Veille, `VIDEOS_DEFAUT` sans réglage.
+pub fn videos_par_mot(store: &Store) -> Res<i64> {
+    Ok(store.reglage(REGLAGE_VIDEOS)?.and_then(|v| v.parse().ok()).unwrap_or(VIDEOS_DEFAUT).clamp(VIDEOS_MIN, VIDEOS_MAX))
+}
+
 /// Une plateforme : ses recherches, puis les profils à baser.
-pub async fn passer(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], maintenant: &Date) -> Bilan {
+pub async fn passer(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], voulues: i64, maintenant: &Date) -> Bilan {
     let mut b = Bilan::default();
     let nav = match ouvrir(ctx, p).await {
         Ok(n) => n,
@@ -101,17 +112,17 @@ pub async fn passer(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], mai
             return b;
         }
     };
-    parcourir(ctx, p, a_chercher, nav.as_ref(), maintenant, &mut b).await;
+    parcourir(ctx, p, a_chercher, voulues, nav.as_ref(), maintenant, &mut b).await;
     nav.fermer().await;
     b
 }
 
-async fn parcourir(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], nav: &dyn Navigateur, maintenant: &Date, b: &mut Bilan) {
+async fn parcourir(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], voulues: i64, nav: &dyn Navigateur, maintenant: &Date, b: &mut Bilan) {
     for (i, m) in a_chercher.iter().enumerate() {
         if i > 0 {
             pause().await;
         }
-        match chercher(ctx, p, m, nav, maintenant).await {
+        match chercher(ctx, p, m, voulues, nav, maintenant).await {
             Ok(gardees) => {
                 b.lignes += gardees.len();
                 for t in gardees {
@@ -139,12 +150,13 @@ async fn parcourir(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], nav:
 }
 
 /// Une recherche : les vidéos gardées, écrites en base.
-async fn chercher(ctx: &Contexte, p: Plateforme, m: &MotVeille, nav: &dyn Navigateur, maintenant: &Date) -> Res<Vec<Trouvaille>> {
-    let trouvees = parseurs::trouvailles(p, &nav.lire(&recherche(p, &m.mot), 6.0, DEFILEMENTS_RECHERCHE).await?);
+async fn chercher(ctx: &Contexte, p: Plateforme, m: &MotVeille, voulues: i64, nav: &dyn Navigateur, maintenant: &Date) -> Res<Vec<Trouvaille>> {
+    let defilements = (voulues / VIDEOS_PAR_DEFILEMENT) as u32;
+    let trouvees = parseurs::trouvailles(p, &nav.lire(&recherche(p, &m.mot), 6.0, defilements).await?);
     if trouvees.is_empty() {
         return Err(format_err(format!("aucune réponse capturée (page : {})", nav.ou().await)));
     }
-    let gardees: Vec<Trouvaille> = trouvees.into_iter().filter(|t| garde(t, m.vues_min, maintenant)).collect();
+    let gardees = retenir(trouvees, m.vues_min, voulues);
     ctx.store.lot(|| {
         for t in &gardees {
             ctx.store.trouvaille(t, &m.business, Some(&m.mot), maintenant)?;
@@ -244,12 +256,17 @@ fn compact(n: i64) -> String {
     format!("{}\u{a0}{}", decimale(arrondi(v)), UNITES[i])
 }
 
-/// Garde une vidéo publiée depuis moins de `RECENTE_JOURS` (ou sans date), à partir de `vues_min` vues ; sans vues
-/// (recherche Instagram), à partir de `vues_min / 50` likes.
-pub fn garde(t: &Trouvaille, vues_min: i64, maintenant: &Date) -> bool {
-    if t.publiee.is_some_and(|d| *maintenant - d > Duration::days(RECENTE_JOURS)) {
-        return false;
-    }
+/// Les `voulues` vidéos les plus récentes de la recherche parmi celles que `garde` retient ; une date inconnue passe
+/// après les autres.
+pub fn retenir(trouvees: Vec<Trouvaille>, vues_min: i64, voulues: i64) -> Vec<Trouvaille> {
+    let mut gardees: Vec<Trouvaille> = trouvees.into_iter().filter(|t| garde(t, vues_min)).collect();
+    gardees.sort_by_key(|t| std::cmp::Reverse(t.publiee));
+    gardees.truncate(voulues as usize);
+    gardees
+}
+
+/// Garde une vidéo à partir de `vues_min` vues ; sans vues (recherche Instagram), à partir de `vues_min / 50` likes.
+pub fn garde(t: &Trouvaille, vues_min: i64) -> bool {
     match t.vues {
         Some(vues) => vues >= vues_min,
         None => t.likes.unwrap_or(0) >= vues_min / 50,
@@ -259,7 +276,6 @@ pub fn garde(t: &Trouvaille, vues_min: i64, maintenant: &Date) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::Store;
     use chrono::{TimeZone, Utc};
 
     fn t0() -> Date { Utc.timestamp_opt(1_800_000_000, 0).unwrap() }
@@ -268,22 +284,36 @@ mod tests {
     fn garde_les_vues_ou_les_likes() {
         let mut t = Trouvaille::nouvelle(Plateforme::Instagram, "A", "x");
         t.vues = Some(19_999);
-        assert!(!garde(&t, 20_000, &t0()));
+        assert!(!garde(&t, 20_000));
         t.vues = None;
         t.likes = Some(400);
-        assert!(garde(&t, 20_000, &t0()));
+        assert!(garde(&t, 20_000));
         t.likes = Some(399);
-        assert!(!garde(&t, 20_000, &t0()));
+        assert!(!garde(&t, 20_000));
     }
 
     #[test]
-    fn garde_les_recentes() {
-        let mut t = Trouvaille::nouvelle(Plateforme::Tiktok, "A", "x");
-        t.vues = Some(50_000);
-        t.publiee = Some(t0() - Duration::days(RECENTE_JOURS));
-        assert!(garde(&t, 20_000, &t0()));
-        t.publiee = Some(t0() - Duration::days(RECENTE_JOURS + 1));
-        assert!(!garde(&t, 20_000, &t0()));
+    fn retient_les_plus_recentes() {
+        let video = |brut: &str, jours: Option<i64>, vues: i64| {
+            let mut t = Trouvaille::nouvelle(Plateforme::Tiktok, brut, "x");
+            t.publiee = jours.map(|j| t0() - Duration::days(j));
+            t.vues = Some(vues);
+            t
+        };
+        let trouvees = vec![video("vieille", Some(400), 90_000), video("sans-date", None, 90_000), video("faible", Some(1), 100), video("recente", Some(2), 30_000), video("moyenne", Some(40), 50_000)];
+        let ids = |v: Vec<Trouvaille>| v.into_iter().map(|t| t.brut).collect::<Vec<_>>();
+        assert_eq!(ids(retenir(trouvees.clone(), 20_000, 2)), ["recente", "moyenne"]);
+        assert_eq!(ids(retenir(trouvees, 20_000, 10)), ["recente", "moyenne", "vieille", "sans-date"]);
+    }
+
+    #[test]
+    fn curseur_borne_et_par_defaut() {
+        let s = Store::memoire().unwrap();
+        assert_eq!(videos_par_mot(&s).unwrap(), VIDEOS_DEFAUT);
+        s.regler(REGLAGE_VIDEOS, Some("1000")).unwrap();
+        assert_eq!(videos_par_mot(&s).unwrap(), VIDEOS_MAX);
+        s.regler(REGLAGE_VIDEOS, Some("x")).unwrap();
+        assert_eq!(videos_par_mot(&s).unwrap(), VIDEOS_DEFAUT);
     }
 
     #[test]

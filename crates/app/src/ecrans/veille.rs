@@ -9,7 +9,7 @@ use noyau::lecture::format;
 use noyau::modeles::Plateforme;
 use noyau::modeles_veille::{AnalyseVeille, MotVeille, VideoVeille};
 use noyau::p;
-use noyau::sources::veille::{analyse, PLATEFORMES};
+use noyau::sources::veille::{analyse, videos_par_mot, PLATEFORMES, REGLAGE_VIDEOS, VIDEOS_MAX, VIDEOS_MIN, VIDEOS_PAS};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -33,6 +33,16 @@ pub struct EcranVeille {
     sans_mot: bool,
     choisie: Option<String>,
     detail: Option<DetailVeille>,
+    curseur: Curseur,
+}
+
+/// Les vidéos gardées par mot-clé à chaque passage.
+#[derive(Serialize)]
+pub struct Curseur {
+    min: i64,
+    max: i64,
+    pas: i64,
+    valeur: i64,
 }
 
 #[derive(Serialize)]
@@ -150,7 +160,16 @@ pub async fn veille(
         sans_mot: mots.is_empty(),
         detail: liste.iter().find(|v| Some(&v.id) == choisie.as_ref()).map(|v| detail(v, &m)),
         choisie,
+        curseur: Curseur { min: VIDEOS_MIN, max: VIDEOS_MAX, pas: VIDEOS_PAS, valeur: videos_par_mot(&etat.store).map_err(texte)? },
     })
+}
+
+/// Le curseur : lu au début du passage suivant.
+#[tauri::command]
+pub async fn regler_videos(etat: State<'_, Etat>, nombre: i64) -> Rep<()> {
+    etat.store.regler(REGLAGE_VIDEOS, Some(&nombre.clamp(VIDEOS_MIN, VIDEOS_MAX).to_string())).map_err(texte)?;
+    etat.store.a_change();
+    Ok(())
 }
 
 /// Ajoute un mot-clé ; la veille le cherche aussitôt.

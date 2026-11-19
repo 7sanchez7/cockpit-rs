@@ -346,5 +346,6 @@ Clé, valeur texte (`Store::reglage`, `regler`, qui efface la clé pour `None`) 
 | `ecran`, `business`, `boutique`, `accueil.reseau`, `accueil.plan` | l'état de l'interface rendu au démarrage (`commandes::REGLAGES`) : dernier écran, filtre de business, store affiché (`app_store`, `play_store`, absent = total), panneaux repliés (`0`) |
 | `notifs.<type>` | `0` coupe les notifications d'un type du fil (`essai`, `achat`… ; `TypeFil::reglage_notif`), absent = activé |
 | `collecte.pause` | `1` met le collecteur en pause (`REGLAGE_PAUSE`) |
+| `veille.videos` | vidéos gardées par mot-clé et par plateforme à chaque passage de la Veille, de 10 à 100 (`REGLAGE_VIDEOS`), absent = 40 ; la version Swift l'ignore |
 | `posthog.horaire.<business>` | instant ISO du dernier calcul de `install` et `porte`, refaits au plus une fois par heure |
 | `graine` | date ISO de modification de la graine déjà appliquée |
