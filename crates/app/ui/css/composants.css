@@ -272,7 +272,7 @@ img { display: block; }
   opacity: 0;
   transition: opacity var(--duree-fondu);
 }
-.courbe .vise { position: absolute; width: var(--t-point); height: var(--t-point); margin: calc(var(--t-point) / -2) 0 0 calc(var(--t-point) / -2); border-radius: 50%; background: var(--c); box-shadow: var(--contour-vise); pointer-events: none; }
+.courbe .vise { position: absolute; width: var(--t-point); height: var(--t-point); margin: calc(var(--t-point) / -2) 0 0 calc(var(--t-point) / -2); border-radius: 50%; background: var(--c); box-shadow: var(--contour-vise); pointer-events: none; opacity: 0; transition: opacity var(--duree-fondu); }
 .bulle-graphique {
   position: absolute;
   top: 0;
@@ -291,7 +291,7 @@ img { display: block; }
 }
 .bulle-graphique b { font: var(--f-mini-gras); color: var(--texte); }
 .bulle-graphique .ligne { display: flex; align-items: center; gap: var(--e-s); }
-.trace:hover .viseur, .trace:hover .bulle-graphique { opacity: 1; }
+.trace:hover .viseur, .trace:hover .vise, .trace:hover .bulle-graphique { opacity: 1; }
 
 .barres { position: relative; display: flex; flex-direction: column; gap: var(--e-s); height: var(--hauteur, var(--t-barres-heure)); }
 .barres .colonnes { flex: 1; display: flex; align-items: flex-end; gap: var(--ecart, var(--e-s)); min-height: 0; }
@@ -1263,9 +1263,9 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 }
 .objectif-rythme { font: var(--f-petit); color: var(--secondaire); }
 .entete-table { font: var(--f-mini); color: var(--secondaire); }
-.table-portes .taux, .cellule .taux { font: var(--f-mini); font-variant-numeric: tabular-nums; color: var(--texte); }
-.table-portes .taux.meilleur, .cellule .taux.meilleur { font: var(--f-mini-gras); color: var(--accent); }
-.table-portes .taux.fragile, .cellule .taux.fragile { color: var(--secondaire); }
+.table-portes .taux, .cellule-arbre .taux { font: var(--f-mini); font-variant-numeric: tabular-nums; color: var(--texte); }
+.table-portes .taux.meilleur, .cellule-arbre .taux.meilleur { font: var(--f-mini-gras); color: var(--accent); }
+.table-portes .taux.fragile, .cellule-arbre .taux.fragile { color: var(--secondaire); }
 .table-portes {
   display: grid;
   grid-template-columns: minmax(0, 1fr) repeat(4, auto);
@@ -1459,9 +1459,9 @@ button.etape:hover { background: var(--blanc-survol); }
 .valeur-decoupe .libelle { overflow: hidden; text-overflow: ellipsis; color: var(--texte); }
 .valeur-decoupe .libelle.pas-mesure { color: var(--secondaire); }
 .valeur-decoupe .pourcent { font: var(--f-mini); color: var(--secondaire); }
-.cellule { display: flex; align-items: baseline; justify-content: flex-end; gap: var(--e-s); }
-.cellule .n { font: var(--f-mini); color: var(--secondaire); }
-.cellule .n.seul { font: var(--f-petit); color: var(--texte); }
+.cellule-arbre { display: flex; align-items: baseline; justify-content: flex-end; gap: var(--e-s); }
+.cellule-arbre .n { font: var(--f-mini); color: var(--secondaire); }
+.cellule-arbre .n.seul { font: var(--f-petit); color: var(--texte); }
 .ecarter {
   flex: none;
   display: inline-flex;

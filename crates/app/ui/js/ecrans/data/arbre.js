@@ -159,7 +159,7 @@ export async function arbre(ctx, a) {
   function decoupe(v) {
     const d = v.decoupe;
     const montrees = tout ? d.lignes : d.lignes.slice(0, LIGNES);
-    const cellules = (cs) => cs.map((c) => h("span", { class: "cellule", title: c.aide || null }, c.n != null && h("span", { class: c.taux ? "n" : "n seul" }, c.n), c.taux && taux(c.taux)));
+    const cellules = (cs) => cs.map((c) => h("span", { class: "cellule-arbre", title: c.aide || null }, c.n != null && h("span", { class: c.taux ? "n" : "n seul" }, c.n), c.taux && taux(c.taux)));
     return bloc(
       enTetePanneau(d.titre, h("span", { class: "accessoire-texte" }, d.texte)),
       h(
