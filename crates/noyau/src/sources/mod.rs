@@ -1,16 +1,25 @@
 //! Les sources, une par service (docs/sources/).
-use crate::collecte::Source;
-use std::sync::Arc;
-
+pub mod app_store_connect;
 pub mod contenu;
 pub mod facebook;
 pub mod instagram;
+pub mod pays_fr;
+pub mod play_console;
+pub mod posthog;
+pub mod revenuecat;
 pub mod tiktok;
 pub mod youtube;
+
+use crate::collecte::Source;
+use std::sync::Arc;
 
 /// Toutes les sources, dans l'ordre de Santé.
 pub fn toutes() -> Vec<Arc<dyn Source>> {
     vec![
+        Arc::new(posthog::PostHog),
+        Arc::new(revenuecat::RevenueCat),
+        Arc::new(app_store_connect::AppStoreConnect),
+        Arc::new(play_console::PlayConsole),
         Arc::new(tiktok::TikTok),
         Arc::new(instagram::Instagram),
         Arc::new(youtube::YouTube),
