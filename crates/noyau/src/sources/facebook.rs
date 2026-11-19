@@ -1,7 +1,7 @@
 //! Voir docs/sources/facebook.md.
 use super::tiktok::{comptes_suivis, debut_legende, fusionner, publier, sans_echec};
-use crate::collecte::http::UA_NAVIGATEUR;
-use crate::collecte::{miniatures, safari, Contexte, Http, Requete, Source};
+use crate::collecte::http::{self, UA_NAVIGATEUR};
+use crate::collecte::{miniatures, Contexte, Http, Requete, Source};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::modeles::{Analyse, Compte, Part, Plateforme, Releve, ReleveCompte, Video};
@@ -43,7 +43,7 @@ impl Source for Facebook {
         let maintenant = jour::maintenant();
         let comptes = comptes_suivis(ctx, Plateforme::Facebook, "aucune Page Facebook suivie, en ajouter dans Vidéos")?;
         let cookies = ctx.hote.cookies("facebook.com", "c_user")?;
-        let cookie = safari::entete(&cookies);
+        let cookie = http::entete_cookie(&cookies);
         let utilisateur = cookies.get("c_user").map(String::as_str).unwrap_or("");
 
         let mut echecs = vec![];

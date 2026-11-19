@@ -1,7 +1,7 @@
 //! Voir docs/sources/instagram.md.
 use super::tiktok::{comptes_suivis, debut_legende, fusionner, publier, sans_echec};
 use crate::collecte::http::{self, UA_SAFARI};
-use crate::collecte::{miniatures, safari, ytdlp, Contexte, Hote, Http, Requete, Source};
+use crate::collecte::{miniatures, ytdlp, Contexte, Hote, Http, Requete, Source};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::modeles::{Compte, Plateforme, Releve, ReleveCompte, Video};
@@ -39,7 +39,7 @@ impl Source for Instagram {
         let maintenant = jour::maintenant();
         let comptes = comptes_suivis(ctx, Plateforme::Instagram, "aucun compte Instagram suivi, en ajouter dans Vidéos")?;
         let cookies = ctx.hote.cookies("instagram.com", "sessionid")?;
-        let cookie = safari::entete(&cookies);
+        let cookie = http::entete_cookie(&cookies);
         let csrf = cookies.get("csrftoken").map(String::as_str).unwrap_or("");
         let lire = |chemin: String, c: &Compte| {
             let r = Requete::get(format!("{SITE}{chemin}"))

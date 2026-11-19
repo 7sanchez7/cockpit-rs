@@ -1,12 +1,20 @@
 use crate::erreur::{Erreur, Res};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 use std::time::Duration;
 
 /// Pour les pages publiques qui ne répondent qu'à un navigateur.
 pub const UA_NAVIGATEUR: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 /// Safari, pour les sessions lues dans Safari : un site peut refuser une session qui change de navigateur.
 pub const UA_SAFARI: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Safari/605.1.15";
+
+/// L'en-tête `Cookie` d'une session, quelle que soit sa provenance (Safari ou la fenêtre Sessions).
+pub fn entete_cookie(cookies: &HashMap<String, String>) -> String {
+    let mut v: Vec<String> = cookies.iter().map(|(k, v)| format!("{k}={v}")).collect();
+    v.sort();
+    v.join("; ")
+}
 
 /// Une requête prête, rejouable.
 #[derive(Debug, Clone)]

@@ -81,13 +81,6 @@ pub fn plus_recente(profils: &[Vec<Cookie>], domaine: &str, requis: &str, mainte
         .map(|(s, _)| s)
 }
 
-/// L'en-tête `Cookie` d'une session.
-pub fn entete(cookies: &HashMap<String, String>) -> String {
-    let mut v: Vec<String> = cookies.iter().map(|(k, v)| format!("{k}={v}")).collect();
-    v.sort();
-    v.join("; ")
-}
-
 /// Les cookies encore valides de `domaine` et de ses sous-domaines, par nom ; pour un nom en double, le plus récent.
 pub fn session(cookies: &[Cookie], domaine: &str, maintenant: &Date) -> HashMap<String, String> {
     let mut retenus: HashMap<String, &Cookie> = HashMap::new();

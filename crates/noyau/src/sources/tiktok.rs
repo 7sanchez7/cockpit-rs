@@ -1,6 +1,6 @@
 //! Voir docs/sources/tiktok.md.
-use crate::collecte::http::{encoder, extrait, UA_NAVIGATEUR};
-use crate::collecte::{miniatures, safari, ytdlp, Contexte, Http, Requete, Source};
+use crate::collecte::http::{self, encoder, extrait, UA_NAVIGATEUR};
+use crate::collecte::{miniatures, ytdlp, Contexte, Http, Requete, Source};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::metrique;
@@ -85,7 +85,7 @@ impl Source for TikTok {
         let mut sans_studio = None;
         let mut studio: Option<(String, Vec<Option<i64>>)> = None;
         let prive: Res<()> = async {
-            let cookie = safari::entete(&ctx.hote.cookies("tiktok.com", "sessionid")?);
+            let cookie = http::entete_cookie(&ctx.hote.cookies("tiktok.com", "sessionid")?);
             let session = compte_session(&cookie, &ctx.http).await?.to_lowercase();
             let Some(c) = comptes.iter().find(|c| c.handle == session) else {
                 sans_studio = Some(format!("stats privées : @{session} connecté dans Safari n'est pas suivi"));
