@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "veille",
+  "description": "Les pages cachées de la veille : elles ne peuvent que rendre le JSON qu'elles reçoivent.",
+  "windows": ["veille-*"],
+  "remote": { "urls": ["https://*.tiktok.com", "https://*.tiktok.com/*", "https://*.instagram.com", "https://*.instagram.com/*", "https://*.facebook.com/*"] },
+  "permissions": ["veille:default"]
+}

@@ -1,0 +1,19 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Cockpit",
+        "width": 1320,
+        "height": 920,
+        "minWidth": 1080,
+        "minHeight": 720,
+        "backgroundColor": "#050506",
+        "theme": "Dark",
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ]
+  }
+}
