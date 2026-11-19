@@ -1,7 +1,7 @@
 //! Les dimensions d'un install : ce que l'onboarding a appris de la personne.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Dimension {
     Loin, Langue, Maternelle, Source, Age, Motivation, Blocage, Interet, Niveau, Tuteur, Notifs, Compte, Pays,

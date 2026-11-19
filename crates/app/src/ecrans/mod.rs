@@ -54,5 +54,11 @@ pub fn commandes() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
         commandes::relancer,
         commandes::session,
         commandes::lien,
+        accueil::accueil,
+        accueil::cocher_tache,
+        accueil::activer_compte,
+        accueil::ouvrir_notes,
+        data::data,
+        data::arbre,
     ]
 }

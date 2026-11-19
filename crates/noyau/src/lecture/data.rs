@@ -7,7 +7,7 @@ use crate::erreur::Res;
 use crate::jour;
 use crate::modeles::Cohorte;
 use crate::p;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Un nœud de l'arbre des installs : ceux qui passent tous les filtres sur la période, ce qu'ils ont fait, ce que
 /// RevenueCat dit de leur paiement. Rond fini et retours ne comptent que les installs depuis `RONDS_DEPUIS`, et
@@ -54,7 +54,7 @@ impl Segment {
 }
 
 /// Un pas dans l'arbre : une réponse gardée ou écartée, ou une étape du tunnel passée.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Filtre {
     /// Une valeur de la dimension ; la valeur vide garde ceux qui n'ont pas répondu, `Dimension::PAS_MESURE` ceux
