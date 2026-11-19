@@ -23,17 +23,25 @@ pub struct Requete {
     pub methode: String,
     pub entetes: Vec<(String, String)>,
     pub corps: Option<Vec<u8>>,
+    /// Le délai de la requête, s'il dépasse celui du client (60 s).
+    pub delai: Option<Duration>,
 }
 
 impl Requete {
     pub fn get(url: impl Into<String>) -> Requete { Requete::new(url, "GET") }
 
     pub fn new(url: impl Into<String>, methode: &str) -> Requete {
-        Requete { url: url.into(), methode: methode.into(), entetes: vec![], corps: None }
+        Requete { url: url.into(), methode: methode.into(), entetes: vec![], corps: None, delai: None }
     }
 
     /// `Authorization: Bearer <jeton>`.
     pub fn jeton(self, jeton: &str) -> Requete { self.entete("Authorization", &format!("Bearer {jeton}")) }
+
+    /// Laisse `secondes` à la réponse, pour un appel lent (une analyse d'images par Claude).
+    pub fn delai(mut self, secondes: u64) -> Requete {
+        self.delai = Some(Duration::from_secs(secondes));
+        self
+    }
 
     /// Remplace un en-tête du même nom.
     pub fn entete(mut self, nom: &str, valeur: &str) -> Requete {
@@ -104,6 +112,9 @@ impl Http {
             }
             if let Some(c) = &r.corps {
                 b = b.body(c.clone());
+            }
+            if let Some(d) = r.delai {
+                b = b.timeout(d);
             }
             let reponse = b.send().await.map_err(|e| Erreur::Commande(format!("réseau : {e}")))?;
             let code = reponse.status().as_u16();

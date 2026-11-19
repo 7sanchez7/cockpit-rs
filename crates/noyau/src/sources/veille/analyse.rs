@@ -68,6 +68,7 @@ async fn analyser_une(ctx: &Contexte, v: &VideoVeille, cle: &str, formats: &[Str
     let r = Requete::new("https://api.anthropic.com/v1/messages", "POST")
         .entete("x-api-key", cle)
         .entete("anthropic-version", "2023-06-01")
+        .delai(120)
         .json(&corps(v, &images, &transcription, formats));
     let o = ctx.http.objet(&r).await?;
     let (entree, sortie) = usage(&o);
