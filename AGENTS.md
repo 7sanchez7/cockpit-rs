@@ -15,7 +15,7 @@ Cockpit est une app de bureau (Windows et Mac) pour suivre ses business, écrite
 | Lancer, tester, déboguer, fabriquer l'installeur | [`docs/runbook.md`](docs/runbook.md) |
 | Lire un chiffre, la veille, nos vidéos depuis un agent | CLI `cockpit` ([`docs/cli.md`](docs/cli.md)) |
 | Installer le cockpit sur une autre machine, pour un autre business | skill `/installer` ([`.claude/skills/installer/SKILL.md`](.claude/skills/installer/SKILL.md)), [`docs/runbook.md`](docs/runbook.md) § Installer |
-| Ajouter un business | [`docs/collecte.md`](docs/collecte.md) § Business et § Graine, puis Réglages, onglet Business |
+| Ajouter un business | [`docs/collecte.md`](docs/collecte.md) § Business et § Graine (l'onglet Business de Réglages n'est pas encore codé) |
 | Répondre aux users, traiter les retours | [`docs/ecrans.md`](docs/ecrans.md) § SAV, puis [`docs/sources/firebase.md`](docs/sources/firebase.md) § SAV |
 
 ## Règles
@@ -24,12 +24,12 @@ Cockpit est une app de bureau (Windows et Mac) pour suivre ses business, écrite
 - **Rien de propre à un utilisateur dans le dépôt** : le business et les comptes dans la graine (`graine.json`, dans le dossier des données), les clés dans le trousseau. Le code garde des valeurs par défaut, celles de Roleo (`Evenements` dans `crates/noyau/src/business.rs`).
 - **Rétrocompatible avec la version SwiftUI.** Même schéma (`crates/noyau/src/schema.rs`, sans migrations), mêmes identifiants, mêmes formats de date et de JSON en base, mêmes clés de réglage, même trousseau (service `cockpit`, compte `<business>.<NOM>`). Une table ou une colonne nouvelle doit rester lisible par l'autre version (colonne facultative, table ignorée).
 - **Multiplateforme.** Aucun chemin en dur (`~`, `/`) : `noyau::chemins`. Un programme local passe par `noyau::collecte::commande`, qui trouve aussi `yt-dlp.exe`. Les cookies passent par `Hote::cookies` (Safari sur Mac, sinon la fenêtre Sessions de l'app), le navigateur caché par `Hote::navigateur`. Ce qui n'existe que sur Mac (l'app Notes) rend `Erreur::NonConfigure` ailleurs, jamais un panic. Avant de finir : `cargo check --workspace --target x86_64-pc-windows-gnu` passe ([`docs/runbook.md`](docs/runbook.md) § Vérifier Windows depuis le Mac).
-- **Les écrans ne parlent jamais au réseau.** L'interface (`crates/app/ui`) n'appelle que les commandes Tauri (`crates/app/src/commandes.rs`, `ecrans.rs`), qui lisent la base par `noyau::lecture`. Seules les sources (`crates/noyau/src/sources/`) appellent des API. Exceptions : dans Apps de potes, les icônes (URL d'artwork d'iTunes) et l'ajout d'une app (un lookup iTunes) ; dans SAV, les trois actions (`repondre`, `fermer`, `traiter`) vers le SAV de la source Firebase.
+- **Les écrans ne parlent jamais au réseau.** L'interface (`crates/app/ui`) n'appelle que les commandes Tauri (`crates/app/src/commandes.rs`, `crates/app/src/ecrans/`), qui lisent la base par `noyau::lecture`. Seules les sources (`crates/noyau/src/sources/`) appellent des API. Exceptions : dans Apps de potes, les icônes (URL d'artwork d'iTunes) et l'ajout d'une app (un lookup iTunes) ; dans SAV, les trois actions (`repondre`, `fermer`, `traiter`) vers le SAV de la source Firebase.
 - **Une source n'écrit que par `Store`** et seulement dans les tables et métriques documentées dans `docs/donnees.md`.
 - **Lecture seule partout, sauf le SAV.** Le cockpit ne modifie rien chez PostHog, RevenueCat, App Store Connect, TikTok ni Firestore. Seule exception, propre à Roleo : l'écran SAV écrit dans le Firestore de Roleo ce qu'écrit son dashboard admin et envoie la notif FCM de la réponse, sur un clic, jamais pendant un passage ([`docs/sources/firebase.md`](docs/sources/firebase.md) § SAV).
 - **RevenueCat v1 `GET /subscribers/{id}` crée le client s'il n'existe pas** : ne jamais l'appeler. L'API v2 en lecture seulement.
 - **Clé PostHog personnelle scopée au projet**, jamais à l'organisation.
-- Design : la maquette « Console en verre liquide » de la version Mac est la référence ([`docs/design.md`](docs/design.md)). Fond uni sombre, jamais de halos ni de dégradés de couleur. Couleurs, rayons, tailles : uniquement les variables de `crates/app/ui/css/theme.css`.
+- Design : le terminal de marché noir et blanc de la version Mac est la référence ([`docs/design.md`](docs/design.md)). Fond noir, jamais de dégradé de couleur ; la couleur ne porte qu'un sens. Couleurs, rayons, tailles : uniquement les variables de `crates/app/ui/css/theme.css`.
 - Textes de l'UI en français, sans tiret cadratin (une virgule à la place), nombres au format français (`48 200`, `7,10 €`).
 
 ## Écrire du code

@@ -2,19 +2,22 @@
 
 Tout se lance depuis la racine du dépôt.
 
+Les écrans ne sont pas encore codés (`crates/app/ui/js/ecrans/*.js` affichent « À venir. ») : ce que ce runbook attribue à Santé, Réglages ou Vidéos vaut pour la suite. D'ici là, l'état des sources se lit par `cockpit etat` ou dans la table `collecte`.
+
 ## Prérequis
 
-- [Rust](https://rustup.rs) stable (1.85 ou plus).
+- [Rust](https://rustup.rs) stable. Le dépôt ne fixe pas de version minimale (`rust-version` absent des `Cargo.toml`, édition 2021).
 - **Windows** : les outils de compilation C++ de Visual Studio (« Build Tools for Visual Studio », charge « Développement Desktop en C++ »). WebView2 est déjà dans Windows 10 et 11.
 - **Mac** : les Command Line Tools (`xcode-select --install`).
 - Pour fabriquer l'installeur : `cargo install tauri-cli --version "^2" --locked`.
-- Pour un business avec `firebaseProject` seulement, identifiants Google par défaut pour Secret Manager et Firestore : `gcloud auth application-default login` (une fois ; crée `application_default_credentials.json` dans `~/.config/gcloud/` sur Mac, `%APPDATA%\gcloud\` sous Windows). Le cockpit lit ce fichier en HTTP, sans la CLI gcloud ; `GOOGLE_APPLICATION_CREDENTIALS` le remplace.
-- La clé App Store Connect `AuthKey_<KEYID>.p8` dans `.appstoreconnect/private_keys/` du dossier personnel (`~` sur Mac, `C:\Users\<nom>` sous Windows), et l'issuer dans Réglages, onglet Business.
-- `yt-dlp` pour TikTok et YouTube, `ffmpeg` pour la première image des vidéos YouTube et Facebook. Mac : `brew install yt-dlp ffmpeg`. Windows : `winget install yt-dlp.yt-dlp Gyan.FFmpeg` (ou scoop). L'app les cherche dans le PATH puis dans les dossiers de Homebrew, winget, scoop et pip, même lancée depuis le Finder ou le menu Démarrer.
+- Pour un business avec `firebaseProject` seulement, identifiants Google par défaut pour Secret Manager et Firestore : `gcloud auth application-default login` (une fois ; crée `application_default_credentials.json` dans `~/.config/gcloud/` sur Mac, `%APPDATA%\gcloud\` sous Windows). Le cockpit lit ce fichier et rafraîchit le jeton en HTTP ; la CLI gcloud ne sert qu'en repli (`gcloud auth print-access-token`). `GOOGLE_APPLICATION_CREDENTIALS` remplace le fichier.
+- La clé App Store Connect `AuthKey_<KEYID>.p8` dans `.appstoreconnect/private_keys/` du dossier personnel (`~` sur Mac, `C:\Users\<nom>` sous Windows), et l'issuer dans le champ `ascIssuer` du business, dans la graine (l'onglet Business de Réglages n'est pas encore codé).
+- `yt-dlp` pour TikTok et YouTube, `ffmpeg` pour la première image des vidéos YouTube et Facebook. Mac : `brew install yt-dlp ffmpeg`. Windows : `winget install yt-dlp.yt-dlp Gyan.FFmpeg` (ou scoop). L'app les cherche dans le PATH puis dans les dossiers de Homebrew, winget, scoop et pip, même lancée depuis le Finder ou le menu Démarrer (`noyau::collecte::commande`).
+- **La Veille** ([`sources/veille.md`](sources/veille.md)) ne tourne que dans l'app (le navigateur caché n'existe pas dans la CLI ni dans l'essai) et demande en plus : les sessions TikTok et Instagram ; `yt-dlp` ; `ffmpeg` et `ffprobe` pour les images des analyses ; la clé `ANTHROPIC_API_KEY` (nom réglable par le champ `claude` de la graine), sans laquelle les vidéos sont relevées mais pas analysées ; `transcrire` dans le PATH, facultatif (sans lui, l'analyse se fait sur les images seules). Les mots-clés s'ajoutent par `cockpit veille mot ajoute` ([`cli.md`](cli.md)).
 - **Les sessions** de tiktok.com, instagram.com et facebook.com, pour les stats privées TikTok, Instagram et Facebook :
   - Mac : une session ouverte dans Safari, et l'accès complet au disque pour Cockpit (Réglages Système, Confidentialité et sécurité, Accès complet au disque, ajouter `Cockpit.app`, puis la relancer). Sans Safari, la fenêtre Sessions de l'app sert de repli.
-  - Windows : Réglages, onglet Sessions, « Se connecter » ouvre la page de connexion du site dans l'app. La session reste dans le magasin de cookies de l'app (WebView2), partagé avec le navigateur caché de la Veille.
-  - Session expirée : la source passe en gris dans Santé, se reconnecter.
+  - Windows : la commande Tauri `session` (`crates/app/src/commandes.rs`, sites `tiktok`, `instagram`, `facebook`) ouvre la page de connexion du site dans une fenêtre de l'app ; le bouton qui l'appellera, dans Réglages, onglet Sessions, n'est pas encore codé. La session reste dans le magasin de cookies de l'app (WebView2), partagé avec le navigateur caché de la Veille.
+  - Session expirée : la source finit en `non_configure` avec le message qui dit où se reconnecter (`cockpit etat`), se reconnecter.
 - **Le plan de l'Accueil** vient d'une note de l'app Notes (Mac seulement) dont la première ligne est « Cockpit » ([`sources/notes.md`](sources/notes.md)). Sous Windows, la source Notes reste en gris.
 
 ## Où sont les fichiers
@@ -33,7 +36,7 @@ Sur une autre machine, pour un autre business : cloner, puis `claude "/installer
 
 1. La graine `graine.json` dans le dossier des données (§ Où sont les fichiers), sur le modèle de [`outils/graine.exemple.json`](../outils/graine.exemple.json) ([`collecte.md`](collecte.md) § Graine).
 2. `cd crates/app && cargo tauri build`, puis lancer l'installeur de `target/release/bundle/` (`nsis/*-setup.exe` sous Windows, `macos/Cockpit.app` à glisser dans Applications sur Mac). Pour essayer sans installer : `cargo run -p cockpit`.
-3. Les clés dans Réglages, onglet Clés ; les fichiers de clés App Store Connect et Play à leur place (§ Prérequis, [`collecte.md`](collecte.md) § Secrets) ; les sessions (§ Prérequis).
+3. Les clés : l'onglet Clés de Réglages n'est pas encore codé. D'ici là, une variable d'environnement du même nom, Secret Manager pour un business avec `firebaseProject`, ou, sur Mac, les clés déjà rangées par la version SwiftUI (même trousseau). Les fichiers de clés App Store Connect et Play à leur place (§ Prérequis, [`collecte.md`](collecte.md) § Secrets) ; les sessions (§ Prérequis).
 
 L'app Mac fabriquée ainsi n'est pas signée : au premier lancement, clic droit, Ouvrir. Sous Windows, SmartScreen demande « Informations complémentaires », « Exécuter quand même ».
 
@@ -64,16 +67,16 @@ C'est une vérification de compilation : l'installeur Windows se fabrique sur Wi
 
 ## Déboguer
 
-- **Une source en panne** : son message est dans Santé et dans la table `collecte`. La rejouer seule : `cargo run -p noyau --example essai -- <Nom>`.
+- **Une source en panne** : son message est dans la table `collecte` (`cockpit etat`). La rejouer seule : `cargo run -p noyau --example essai -- <Nom>` (nom ou id de la source, `crates/noyau/examples/essai.rs`). L'essai écrit dans `.cache/essai.sqlite` sous le dossier courant, jamais dans la vraie base, avec la graine de la machine ; il n'a ni notification ni navigateur caché, la Veille y finit donc en `non_configure`.
 - **Journal** : l'app écrit ses erreurs sur la sortie d'erreur ; `cargo run -p cockpit` les montre dans le terminal.
 - **La base** : `sqlite3 <dossier des données>/cockpit.sqlite`, ou `cockpit sql "select …"`. L'effacer est sans risque, seul l'historique accumulé est perdu.
 - **Les images** : le dossier du cache, `miniatures/`. Le vider fait tout retélécharger au prochain passage de chaque source.
-- **Une clé** : variable d'environnement du même nom pour tester (`REVENUECAT_API_KEY=… cargo run -p noyau --example essai -- RevenueCat`) ; dans l'app, Réglages, onglet Clés, la range dans le trousseau. Ne jamais l'afficher.
+- **Une clé** : variable d'environnement du même nom pour tester (`REVENUECAT_SECRET_KEY_V2=… cargo run -p noyau --example essai -- RevenueCat`) : elle passe avant le trousseau (`Secrets::valeur`). Ne jamais l'afficher.
 - **L'interface** : en debug, clic droit, Inspecter, ouvre les outils de développement de la WebView.
 
 ## Comptes vidéo
 
-La graine les ajoute ([`collecte.md`](collecte.md) § Graine) ; l'écran Vidéos les ajoute, les met en pause et les retire ; un agent fait la même chose dans la base, puis relance la source (Ctrl+R ou ⌘R, ou Santé). L'id est `<plateforme>:<compte>`, le compte sans `@`, en minuscules ; pour Facebook, le nom de la Page ou son id.
+La graine les ajoute ([`collecte.md`](collecte.md) § Graine) ; l'écran Vidéos, quand il sera codé, les ajoutera, mettra en pause et retirera ; un agent fait la même chose dans la base, puis relance les sources (Ctrl+R ou ⌘R, ou F5). L'id est `<plateforme>:<compte>`, le compte sans `@`, en minuscules ; pour Facebook, le nom de la Page ou son id.
 
 ```bash
 B=~/Library/Application\ Support/Cockpit/cockpit.sqlite     # Windows : "$APPDATA/Cockpit/cockpit.sqlite"
