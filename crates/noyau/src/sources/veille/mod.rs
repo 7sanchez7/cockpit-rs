@@ -1,15 +1,17 @@
 //! Les vidéos qui ont marché sur des mots-clés, sur TikTok et Instagram. Voir docs/sources/veille.md.
 pub mod analyse;
 pub mod demande;
+pub mod instagram;
 pub mod parseurs;
 
-use crate::collecte::http::encoder;
-use crate::collecte::{miniatures, ytdlp, Contexte, Navigateur, Source};
+use crate::collecte::http::{encoder, Requete, UA_NAVIGATEUR};
+use crate::collecte::{miniatures, tikhub, ytdlp, Contexte, Navigateur, Source};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::modeles::{Evenement, Plateforme, TypeFil};
 use crate::modeles_veille::{MotVeille, ScoreVeille, Trouvaille, VideoVeille};
 use crate::p;
+use crate::sources::tiktok;
 use crate::store::Store;
 use async_trait::async_trait;
 use chrono::Duration;
@@ -31,8 +33,10 @@ pub const VIDEOS_DEFAUT: i64 = 40;
 /// Les vidéos voulues par défilement de la recherche : ni TikTok ni Instagram ne trient par date sur le web, on lit
 /// une douzaine de vidéos par défilement pour en garder les plus récentes.
 const VIDEOS_PAR_DEFILEMENT: i64 = 5;
-/// La pause entre deux pages, en secondes : un humain qui cherche, pas une rafale.
-pub const PAUSE: (f64, f64) = (20.0, 40.0);
+/// La pause entre deux pages d'une page cachée, en secondes : un humain qui cherche, pas une rafale.
+const PAUSE: (f64, f64) = (20.0, 40.0);
+/// La pause entre deux recherches DuckDuckGo : un site qui limite, pas un site qui surveille.
+const PAUSE_SANS_PAGE: (f64, f64) = (3.0, 6.0);
 pub const PLATEFORMES: [Plateforme; 2] = [Plateforme::Tiktok, Plateforme::Instagram];
 
 /// L'id de la source, que réserve aussi une demande à Claude : l'une attend que l'autre ait fini.
@@ -59,9 +63,15 @@ impl Source for Veille {
         let a_chercher = &mots[..mots.len().min(MOTS_PAR_PASSAGE)];
         let voulues = videos_par_mot(store)?;
 
+        let mut echecs: Vec<String> = vec![];
+        if let Err(e) = ytdlp::tenir_a_jour(&ctx.http).await {
+            echecs.push(format!("yt-dlp nightly : {e}"));
+        }
+        // une clé TikHub remplace la page cachée de TikTok et la session d'Instagram pour chercher et baser
+        let cle = tikhub::cle(ctx).await;
         // TikTok et Instagram en même temps : deux sites, chacun à son rythme, le passage dure le plus long des deux
-        let bilans = futures::future::join_all(PLATEFORMES.map(|p| passer(ctx, p, a_chercher, voulues, &maintenant))).await;
-        let mut echecs: Vec<String> = bilans.iter().flat_map(|b| b.echecs.clone()).collect();
+        let bilans = futures::future::join_all(PLATEFORMES.map(|p| passer(ctx, p, a_chercher, voulues, cle.as_deref(), &maintenant))).await;
+        echecs.extend(bilans.iter().flat_map(|b| b.echecs.clone()));
         let lignes = bilans.iter().map(|b| b.lignes).sum();
         let mut images: HashMap<String, String> = HashMap::new();
         for (id, url) in bilans.into_iter().flat_map(|b| b.images) {
@@ -106,27 +116,40 @@ pub fn videos_par_mot(store: &Store) -> Res<i64> {
     Ok(store.reglage(REGLAGE_VIDEOS)?.and_then(|v| v.parse().ok()).unwrap_or(VIDEOS_DEFAUT).clamp(VIDEOS_MIN, VIDEOS_MAX))
 }
 
-/// Une plateforme : ses recherches, puis les profils à baser.
-pub async fn passer(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], voulues: i64, maintenant: &Date) -> Bilan {
+/// Ce qui répond à une recherche : TikHub (`cle`), ou une page cachée (`nav`), ou rien (DuckDuckGo d'Instagram).
+struct Acces<'a> {
+    cle: Option<&'a str>,
+    nav: Option<&'a dyn Navigateur>,
+}
+
+/// Une plateforme : ses recherches, puis les profils à baser. Avec une clé TikHub, tout passe par l'API, sans session
+/// ni navigateur ; sinon, la recherche TikTok exige une session (page cachée) et celle d'Instagram passe par DuckDuckGo
+/// et les embeds.
+pub async fn passer(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], voulues: i64, cle: Option<&str>, maintenant: &Date) -> Bilan {
     let mut b = Bilan::default();
-    let nav = match ouvrir(ctx, p).await {
-        Ok(n) => n,
-        Err(e) => {
-            b.echecs.push(format!("{} : {e}", p.nom()));
-            return b;
+    if cle.is_none() && p == Plateforme::Tiktok {
+        match ouvrir(ctx, p).await {
+            Ok(nav) => {
+                chercher_mots(ctx, p, a_chercher, voulues, Acces { cle: None, nav: Some(nav.as_ref()) }, maintenant, &mut b).await;
+                nav.fermer().await;
+            }
+            // la médiane des comptes passe par yt-dlp : elle se fait sans session
+            Err(e) => b.echecs.push(format!("{} : {e}", p.nom())),
         }
-    };
-    parcourir(ctx, p, a_chercher, voulues, nav.as_ref(), maintenant, &mut b).await;
-    nav.fermer().await;
+    } else {
+        chercher_mots(ctx, p, a_chercher, voulues, Acces { cle, nav: None }, maintenant, &mut b).await;
+    }
+    baser_comptes(ctx, p, cle, maintenant, &mut b).await;
     b
 }
 
-async fn parcourir(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], voulues: i64, nav: &dyn Navigateur, maintenant: &Date, b: &mut Bilan) {
+async fn chercher_mots(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], voulues: i64, acces: Acces<'_>, maintenant: &Date, b: &mut Bilan) {
     for (i, m) in a_chercher.iter().enumerate() {
-        if i > 0 {
-            pause().await;
+        // un humain qui cherche, pas une rafale : la pause n'a de sens que devant une page ou un site qui limite
+        if i > 0 && (acces.nav.is_some() || acces.cle.is_none()) {
+            pause(acces.nav).await;
         }
-        match chercher(ctx, p, m, voulues, nav, maintenant).await {
+        match chercher(ctx, p, m, voulues, acces.cle, acces.nav, maintenant).await {
             Ok(gardees) => {
                 b.lignes += gardees.len();
                 for t in gardees {
@@ -138,6 +161,11 @@ async fn parcourir(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], voul
             Err(e) => b.echecs.push(format!("{} « {} » : {e}", p.nom(), m.mot)),
         }
     }
+}
+
+/// Les médianes des comptes à relire. Avec TikHub, l'API suffit. Sans lui, Instagram lit la page Reels du profil dans
+/// une page cachée : sans session, rien à faire, et rien à dire.
+async fn baser_comptes(ctx: &Contexte, p: Plateforme, cle: Option<&str>, maintenant: &Date, b: &mut Bilan) {
     let comptes = match ctx.store.comptes_a_baser(p, COMPTES_PAR_PASSAGE, maintenant) {
         Ok(c) => c,
         Err(e) => {
@@ -145,21 +173,61 @@ async fn parcourir(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], voul
             return;
         }
     };
-    for handle in comptes {
-        match baser(ctx, p, &handle, nav, maintenant).await {
-            Ok(()) => b.lignes += 1,
-            Err(e) => b.echecs.push(format!("{} @{handle} : {e}", p.nom())),
+    if comptes.is_empty() {
+        return;
+    }
+    let nav = if p == Plateforme::Instagram && cle.is_none() {
+        match ouvrir(ctx, p).await {
+            Ok(n) => Some(n),
+            Err(Erreur::NonConfigure(_)) => return,
+            Err(e) => {
+                b.echecs.push(format!("{} comptes : {e}", p.nom()));
+                return;
+            }
         }
+    } else {
+        None
+    };
+    let mut de_suite = 0;
+    for handle in comptes {
+        match baser(ctx, p, &handle, cle, nav.as_deref(), maintenant).await {
+            Ok(()) => {
+                b.lignes += 1;
+                de_suite = 0;
+            }
+            Err(e) => {
+                b.echecs.push(format!("{} @{handle} : {e}", p.nom()));
+                de_suite += 1;
+            }
+        }
+        // une page qui échoue deux fois de suite (session morte, limite) échouera pour les suivantes
+        if nav.is_some() && de_suite == 2 {
+            break;
+        }
+    }
+    if let Some(n) = nav {
+        n.fermer().await;
     }
 }
 
-/// Une recherche : les vidéos gardées, écrites en base.
-async fn chercher(ctx: &Contexte, p: Plateforme, m: &MotVeille, voulues: i64, nav: &dyn Navigateur, maintenant: &Date) -> Res<Vec<Trouvaille>> {
-    let defilements = (voulues / VIDEOS_PAR_DEFILEMENT) as u32;
-    let trouvees = parseurs::trouvailles(p, &nav.lire(&recherche(p, &m.mot), 6.0, defilements).await?);
-    if trouvees.is_empty() {
-        return Err(format_err(format!("aucune réponse capturée (page : {})", nav.ou().await)));
-    }
+/// Une recherche : les vidéos gardées, écrites en base. Avec une clé TikHub, l'API ; sinon, la page de recherche de
+/// TikTok (`nav`) ou les reels d'Instagram trouvés par DuckDuckGo.
+async fn chercher(ctx: &Contexte, p: Plateforme, m: &MotVeille, voulues: i64, cle: Option<&str>, nav: Option<&dyn Navigateur>, maintenant: &Date) -> Res<Vec<Trouvaille>> {
+    let trouvees = if let Some(cle) = cle {
+        parseurs::trouvailles_objets(p, &tikhub::chercher(&ctx.http, cle, p, &m.mot, voulues).await?)
+    } else {
+        match nav {
+            Some(nav) => {
+                let defilements = (voulues / VIDEOS_PAR_DEFILEMENT) as u32;
+                let trouvees = parseurs::trouvailles(p, &nav.lire(&recherche(&m.mot), 6.0, defilements).await?);
+                if trouvees.is_empty() {
+                    return Err(format_err(format!("aucune réponse capturée (page : {})", nav.ou().await)));
+                }
+                trouvees
+            }
+            None => instagram::chercher(&ctx.http, &m.mot).await?,
+        }
+    };
     let gardees = retenir(trouvees, m.vues_min, voulues);
     ctx.store.lot(|| {
         for t in &gardees {
@@ -171,19 +239,23 @@ async fn chercher(ctx: &Contexte, p: Plateforme, m: &MotVeille, voulues: i64, na
 }
 
 /// La médiane d'un compte relue sur son profil, et le relevé de ses vidéos déjà en base.
-async fn baser(ctx: &Contexte, p: Plateforme, handle: &str, nav: &dyn Navigateur, maintenant: &Date) -> Res<()> {
-    // yt-dlp ne passe pas par la page ; Instagram, si
-    if p == Plateforme::Instagram {
-        pause().await;
+async fn baser(ctx: &Contexte, p: Plateforme, handle: &str, cle: Option<&str>, nav: Option<&dyn Navigateur>, maintenant: &Date) -> Res<()> {
+    // sans TikHub, Instagram passe par la page ; yt-dlp ne passe par aucune page
+    if nav.is_some() {
+        pause(nav).await;
     }
-    let siennes = dernieres(p, handle, nav, maintenant).await?;
+    let siennes = dernieres(ctx, p, handle, cle, nav, maintenant).await?;
     if siennes.is_empty() {
         return Err(format_err("aucune vidéo sur le profil"));
     }
     let vues: Vec<(Option<Date>, i64)> = siennes.iter().filter_map(|t| t.vues.map(|v| (t.publiee, v))).collect();
     let mediane = ScoreVeille::mediane(&vues, maintenant);
+    let mut abonnes = siennes.iter().find_map(|t| t.abonnes);
+    if abonnes.is_none() && p == Plateforme::Tiktok {
+        abonnes = abonnes_tiktok(ctx, handle, maintenant).await;
+    }
     ctx.store.lot(|| {
-        ctx.store.base(p, handle, mediane, siennes.len() as i64, siennes.iter().find_map(|t| t.abonnes), maintenant)?;
+        ctx.store.base(p, handle, mediane, siennes.len() as i64, abonnes, maintenant)?;
         for t in &siennes {
             ctx.store.relever(t, maintenant)?;
         }
@@ -191,10 +263,17 @@ async fn baser(ctx: &Contexte, p: Plateforme, handle: &str, nav: &dyn Navigateur
     })
 }
 
-/// Une attente au hasard dans `PAUSE`.
-async fn pause() {
+/// Les abonnés d'un compte TikTok, lus sur sa page publique (yt-dlp ne les donne pas) ; `None` si la page a changé.
+async fn abonnes_tiktok(ctx: &Contexte, handle: &str, maintenant: &Date) -> Option<i64> {
+    let page = ctx.http.donnees(&Requete::get(Plateforme::Tiktok.profil(handle)).entete("User-Agent", UA_NAVIGATEUR)).await.ok()?;
+    tiktok::profil(&page, handle, maintenant).ok()?.0.abonnes
+}
+
+/// Une attente au hasard : longue devant une page cachée (`nav`), courte sans.
+async fn pause(nav: Option<&dyn Navigateur>) {
+    let (min, max) = if nav.is_some() { PAUSE } else { PAUSE_SANS_PAGE };
     let hasard = uuid::Uuid::new_v4().as_u128() as f64 / u128::MAX as f64;
-    tokio::time::sleep(Delai::from_secs_f64(PAUSE.0 + (PAUSE.1 - PAUSE.0) * hasard)).await;
+    tokio::time::sleep(Delai::from_secs_f64(min + (max - min) * hasard)).await;
 }
 
 /// Un navigateur caché avec la session de la plateforme.
@@ -205,17 +284,19 @@ pub async fn ouvrir(ctx: &Contexte, p: Plateforme) -> Res<Box<dyn Navigateur>> {
     ctx.hote.navigateur(&filtres, &cookies, &format!(".{domaine}")).await
 }
 
-pub fn recherche(p: Plateforme, mot: &str) -> String {
-    let base = if p == Plateforme::Tiktok { "https://www.tiktok.com/search/video" } else { "https://www.instagram.com/explore/search/keyword/" };
-    format!("{base}?q={}", encoder(mot))
-}
+/// La page de recherche de vidéos de TikTok.
+pub fn recherche(mot: &str) -> String { format!("https://www.tiktok.com/search/video?q={}", encoder(mot)) }
 
-/// Les dernières vidéos d'un compte, pour sa médiane. TikTok : `yt-dlp`, sa page de profil ne rend pas la liste à
-/// une page cachée. Instagram : sa page Reels dans la page cachée (`clips_connection`, 12 reels avec leurs vues) ;
-/// `web_profile_info` répond 404 depuis le 18 nov. 2026, même à la page.
-pub async fn dernieres(p: Plateforme, handle: &str, nav: &dyn Navigateur, maintenant: &Date) -> Res<Vec<Trouvaille>> {
+/// Les dernières vidéos d'un compte, pour sa médiane. Avec une clé TikHub, l'API. Sinon : TikTok par `yt-dlp` (sa page
+/// de profil ne rend pas la liste à une page cachée) ; Instagram, sa page Reels dans la page cachée (`clips_connection`,
+/// 12 reels avec leurs vues). `web_profile_info` répond 404 depuis le 18 nov. 2026, même à la page.
+pub async fn dernieres(ctx: &Contexte, p: Plateforme, handle: &str, cle: Option<&str>, nav: Option<&dyn Navigateur>, maintenant: &Date) -> Res<Vec<Trouvaille>> {
+    if let Some(cle) = cle {
+        return Ok(parseurs::trouvailles_objets(p, &tikhub::dernieres(&ctx.http, cle, p, handle, 20).await?));
+    }
     match p {
         Plateforme::Instagram => {
+            let nav = nav.ok_or_else(|| Erreur::NonConfigure("la médiane d'Instagram demande une session".into()))?;
             let corps = nav.lire(&format!("https://www.instagram.com/{handle}/reels/"), 5.0, 1).await?;
             // la page charge aussi le fil d'accueil : seulement les reels du compte
             let handle = handle.to_lowercase();
@@ -402,6 +483,6 @@ mod tests {
         assert_eq!(compact(1_500_000), "1,5\u{a0}M");
         assert_eq!(decimale(6.0), "6");
         assert_eq!(decimale(6.04), "6");
-        assert_eq!(recherche(Plateforme::Tiktok, "ser o estar"), "https://www.tiktok.com/search/video?q=ser%20o%20estar");
+        assert_eq!(recherche("ser o estar"), "https://www.tiktok.com/search/video?q=ser%20o%20estar");
     }
 }

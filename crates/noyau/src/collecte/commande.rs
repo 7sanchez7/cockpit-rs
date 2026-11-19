@@ -6,9 +6,10 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
-/// Les dossiers parcourus après le PATH.
+/// Les dossiers parcourus : celui des programmes téléchargés par le cockpit, le PATH, puis les installateurs.
 fn dossiers() -> Vec<PathBuf> {
-    let mut d: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+    let mut d: Vec<PathBuf> = vec![crate::chemins::outils()];
+    d.extend(std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect::<Vec<_>>()).unwrap_or_default());
     let maison = dirs::home_dir().unwrap_or_default();
     if cfg!(windows) {
         if let Some(local) = dirs::data_local_dir() {

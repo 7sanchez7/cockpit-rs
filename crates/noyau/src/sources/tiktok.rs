@@ -41,6 +41,9 @@ impl Source for TikTok {
         let comptes = comptes_suivis(ctx, Plateforme::Tiktok, "aucun compte TikTok suivi, en ajouter dans Vidéos")?;
 
         let mut echecs = vec![];
+        if let Err(e) = ytdlp::tenir_a_jour(&ctx.http).await {
+            echecs.push(format!("yt-dlp nightly : {e}"));
+        }
         let mut liste = ytdlp::Liste::default();
         let mut profils = vec![];
         let mut images = HashMap::new();

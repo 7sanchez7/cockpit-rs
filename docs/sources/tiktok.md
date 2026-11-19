@@ -12,7 +12,7 @@ Aucun compte TikTok actif dans les business suivis : `NonConfigure` « aucun com
 yt-dlp --flat-playlist -J https://www.tiktok.com/@monapp
 ```
 
-Lancé par `commande::lancer` (`crates/noyau/src/collecte/commande.rs`), qui cherche `yt-dlp` dans le `PATH` puis dans les dossiers d'installation courants : Homebrew et `~/.local/bin` sur Mac, WinGet, Scoop et les scripts Python sous Windows (`yt-dlp.exe`). Absent : `Commande` « yt-dlp introuvable : l'installer et le mettre dans le PATH ». Public, sans cookie, marche pour tous les comptes.
+Lancé par `commande::lancer` (`crates/noyau/src/collecte/commande.rs`), qui cherche `yt-dlp` dans le dossier d'outils du cockpit (`<données>/bin`, où `ytdlp::tenir_a_jour` télécharge un nightly au début de chaque collecte : la stable échoue sur les profils TikTok, voir [veille.md](veille.md) § yt-dlp nightly), puis dans le `PATH` et les dossiers d'installation courants : Homebrew et `~/.local/bin` sur Mac, WinGet, Scoop et les scripts Python sous Windows (`yt-dlp.exe`). Absent : `Commande` « yt-dlp introuvable : l'installer et le mettre dans le PATH ». Public, sans cookie, marche pour tous les comptes.
 
 Lu dans `entries[]` (`ytdlp::lire_liste`) : l'id, l'URL, la date de publication, la durée, la légende, les compteurs publics et la miniature d'id `cover`. Pas de liste dans la sortie : `Format` « yt-dlp TikTok @monapp : pas de liste de vidéos ».
 

@@ -9,11 +9,17 @@ use std::collections::HashMap;
 
 /// Les vidéos des corps reçus par la page, chacune une fois, lectures fusionnées.
 pub fn trouvailles(p: Plateforme, corps: &[String]) -> Vec<Trouvaille> {
+    let objets: Vec<Value> = corps.iter().flat_map(|c| objets(c)).collect();
+    trouvailles_objets(p, &objets)
+}
+
+/// Les vidéos d'objets déjà décodés (une réponse TikHub), chacune une fois, lectures fusionnées.
+pub fn trouvailles_objets(p: Plateforme, objets: &[Value]) -> Vec<Trouvaille> {
     let mut par_id: HashMap<String, Trouvaille> = HashMap::new();
     let mut ordre: Vec<String> = vec![];
-    for o in corps.iter().flat_map(|c| objets(c)) {
-        parcourir(&o, &mut |d| {
-            let Some(t) = (if p == Plateforme::Tiktok { tiktok(d) } else { instagram(d) }) else { return };
+    for o in objets {
+        parcourir(o, &mut |d| {
+            let Some(t) = (if p == Plateforme::Tiktok { tiktok(d).or_else(|| tiktok_app(d)) } else { instagram(d) }) else { return };
             match par_id.get(&t.id()) {
                 Some(avant) => {
                     let f = avant.fusion(&t);
@@ -71,11 +77,44 @@ pub fn tiktok(d: &Map<String, Value>) -> Option<Trouvaille> {
     })
 }
 
-/// Un reel Instagram : `code` (ou `shortcode`), `taken_at` ou `play_count` (l'onglet Reels d'un profil ne donne pas la
-/// date), vidéo (`media_type` 2 ou `product_type` clips).
+/// Un objet vidéo de l'API mobile de TikTok (TikHub App V3) : `aweme_id`, `statistics.play_count`,
+/// `author.unique_id`, la durée en millisecondes.
+pub fn tiktok_app(d: &Map<String, Value>) -> Option<Trouvaille> {
+    let id = texte(d.get("aweme_id"))?;
+    let auteur = d.get("author")?.as_object()?;
+    let handle = auteur.get("unique_id").and_then(Value::as_str).or_else(|| auteur.get("uniqueId").and_then(Value::as_str))?;
+    let stats = d.get("statistics").and_then(Value::as_object).or_else(|| d.get("stats").and_then(Value::as_object))?;
+    if !["play_count", "playCount"].iter().any(|c| stats.contains_key(*c)) {
+        return None;
+    }
+    let n = |cle: &str, autre: &str| nombre(stats.get(cle)).or_else(|| nombre(stats.get(autre)));
+    let video = d.get("video").and_then(Value::as_object);
+    Some(Trouvaille {
+        plateforme: Plateforme::Tiktok, brut: id, compte: handle.into(), legende: chaine(d.get("desc")),
+        publiee: nombre(d.get("create_time")).and_then(date),
+        duree_s: video.and_then(|v| nombre(v.get("duration"))).map(|ms| ms as f64 / 1000.0),
+        vues: n("play_count", "playCount"), likes: n("digg_count", "diggCount"),
+        commentaires: n("comment_count", "commentCount"), partages: n("share_count", "shareCount"),
+        enregistrements: n("collect_count", "collectCount"),
+        abonnes: nombre(auteur.get("follower_count")).or_else(|| nombre(auteur.get("followerCount"))),
+        image: video.and_then(|v| url_de(v.get("cover"))).or_else(|| video.and_then(|v| url_de(v.get("origin_cover")))),
+        media: video.and_then(|v| url_de(v.get("play_addr"))).or_else(|| video.and_then(|v| url_de(v.get("download_addr")))),
+    })
+}
+
+/// La première URL d'un `{url_list: [...]}` (ou la chaîne elle-même).
+fn url_de(v: Option<&Value>) -> Option<String> {
+    let v = v?;
+    v.get("url_list").and_then(Value::as_array).and_then(|l| l.iter().find_map(|u| u.as_str().map(String::from)))
+        .or_else(|| v.as_str().map(String::from))
+}
+
+/// Un reel Instagram : `code` (ou `shortcode`), `taken_at`, `play_count` ou `video_view_count` (l'onglet Reels d'un
+/// profil et l'embed ne donnent pas la date : elle se lit dans l'id), vidéo (`media_type` 2, `product_type` clips ou
+/// `is_video`).
 pub fn instagram(d: &Map<String, Value>) -> Option<Trouvaille> {
     let code = d.get("code").and_then(Value::as_str).or_else(|| d.get("shortcode").and_then(Value::as_str))?;
-    if !(d.contains_key("taken_at") || d.contains_key("taken_at_timestamp") || d.contains_key("play_count")) {
+    if !["taken_at", "taken_at_timestamp", "play_count", "video_view_count"].iter().any(|c| d.contains_key(*c)) {
         return None;
     }
     let video = nombre(d.get("media_type")) == Some(2) || d.get("product_type").and_then(Value::as_str) == Some("clips")
@@ -96,14 +135,28 @@ pub fn instagram(d: &Map<String, Value>) -> Option<Trouvaille> {
     Some(Trouvaille {
         plateforme: Plateforme::Instagram, brut: code.into(), compte: handle.into(),
         legende: legende.filter(|l| !l.is_empty()).map(String::from),
-        publiee: premier(&["taken_at", "taken_at_timestamp"]).and_then(date),
+        publiee: premier(&["taken_at", "taken_at_timestamp"]).and_then(date).or_else(|| date_de_l_id(d.get("id"))),
         duree_s: d.get("video_duration").and_then(Value::as_f64),
         vues: premier(&["play_count", "ig_play_count", "view_count", "video_view_count"]),
-        likes: nombre(d.get("like_count")).or_else(|| nombre(d.get("edge_liked_by").and_then(|e| e.get("count")))),
-        commentaires: nombre(d.get("comment_count")), partages: premier(&["reshare_count", "share_count"]),
-        enregistrements: None, abonnes: nombre(user.get("follower_count")), image: image.map(String::from),
-        media: media.map(String::from),
+        likes: nombre(d.get("like_count")).or_else(|| compte(d.get("edge_liked_by"))),
+        commentaires: nombre(d.get("comment_count")).or_else(|| compte(d.get("edge_media_to_comment"))),
+        partages: premier(&["reshare_count", "share_count"]),
+        enregistrements: None, abonnes: nombre(user.get("follower_count")).or_else(|| compte(user.get("edge_followed_by"))),
+        image: image.map(String::from), media: media.map(String::from),
     })
+}
+
+/// Le `count` d'un objet `{"count": n}` (les anciens champs `edge_*`).
+fn compte(v: Option<&Value>) -> Option<i64> { nombre(v?.get("count")) }
+
+/// La date d'un id de média Instagram (`4033…` ou `4033…_<compte>`) : ses bits de poids fort sont les millisecondes
+/// depuis le 24 août 2011.
+fn date_de_l_id(id: Option<&Value>) -> Option<crate::jour::Date> {
+    let id: i64 = match id? {
+        Value::String(s) => s.split('_').next()?.parse().ok()?,
+        v => nombre(Some(v))?,
+    };
+    date(((id >> 23) + 1_314_220_021_721) / 1000)
 }
 
 // JSON
@@ -206,6 +259,29 @@ mod tests {
         assert_eq!(t.publiee, date(1_799_900_000));
     }
 
+    /// La recherche TikHub (App V3) : la vidéo est dans `data.data[].aweme_info`, les champs en `snake_case`,
+    /// la durée en millisecondes.
+    const RECHERCHE_TIKHUB: &str = r#"
+        {"code":200,"data":{"data":[{"type":1,"aweme_info":{"aweme_id":"7647571066872712479","desc":"3 erreurs en espagnol",
+          "create_time":1799900000,
+          "statistics":{"play_count":250000,"digg_count":9000,"comment_count":300,"share_count":800,"collect_count":1200},
+          "author":{"unique_id":"profe.ana","nickname":"Ana","follower_count":12000},
+          "video":{"duration":21000,"cover":{"url_list":["https://p16/cover.jpg"]},"play_addr":{"url_list":["https://cdn/v.mp4"]}}}}]}}
+        "#;
+
+    #[test]
+    fn tiktok_cote_app() {
+        let t = &trouvailles(Plateforme::Tiktok, &[RECHERCHE_TIKHUB.into()])[0];
+        assert_eq!(t.id(), Plateforme::Tiktok.id_video("7647571066872712479"));
+        assert_eq!(t.compte, "profe.ana");
+        assert_eq!((t.vues, t.likes, t.commentaires, t.partages, t.enregistrements), (Some(250_000), Some(9_000), Some(300), Some(800), Some(1_200)));
+        assert_eq!(t.abonnes, Some(12_000));
+        assert_eq!(t.duree_s, Some(21.0));
+        assert_eq!(t.image.as_deref(), Some("https://p16/cover.jpg"));
+        assert_eq!(t.media.as_deref(), Some("https://cdn/v.mp4"));
+        assert_eq!(t.publiee, date(1_799_900_000));
+    }
+
     /// Instagram : préfixe `for (;;);`, un reel avec vues, une photo ignorée, et le même reel vu deux fois.
     #[test]
     fn instagram_fusionne_et_ignore_les_photos() {
@@ -218,6 +294,32 @@ mod tests {
         assert_eq!(ts[0].likes, Some(1_000));
         assert_eq!(ts[0].media.as_deref(), Some("https://cdn/v.mp4"));
         assert_eq!(ts[0].legende.as_deref(), Some("Ser o estar"));
+    }
+
+    /// Le reel d'un embed (`gql_data.shortcode_media`) : ni date ni partages, les compteurs en `edge_*`, la date dans l'id.
+    #[test]
+    fn reel_d_un_embed() {
+        let corps = r#"{"gql_data":{"shortcode_media":{"id":"4033719412274227586","shortcode":"Df6pm8UM-mC","is_video":true,
+            "video_view_count":22,"video_duration":64.505,"product_type":"clips",
+            "owner":{"id":"64975230875","username":"appendreespaglo","edge_followed_by":{"count":260}},
+            "edge_liked_by":{"count":1},"edge_media_to_comment":{"count":0},"display_url":"https://cdn/i.jpg",
+            "video_url":"https://cdn/v.mp4","edge_media_to_caption":{"edges":[{"node":{"text":"Apprends l'espagnol"}}]}}}}"#;
+        let t = &trouvailles(Plateforme::Instagram, &[corps.into()])[0];
+        assert_eq!((t.brut.as_str(), t.compte.as_str()), ("Df6pm8UM-mC", "appendreespaglo"));
+        assert_eq!((t.vues, t.likes, t.commentaires, t.abonnes), (Some(22), Some(1), Some(0), Some(260)));
+        assert_eq!(t.duree_s, Some(64.505));
+        assert_eq!(t.publiee, date(1_795_076_847));
+        assert_eq!(t.legende.as_deref(), Some("Apprends l'espagnol"));
+        assert_eq!(t.media.as_deref(), Some("https://cdn/v.mp4"));
+    }
+
+    /// L'id d'un fil (`média_compte`) donne la même date, et un id illisible n'en donne pas.
+    #[test]
+    fn date_de_l_id_du_fil() {
+        let id = |v: &str| date_de_l_id(Some(&Value::String(v.into())));
+        assert_eq!(id("4033719412274227586_64975230875"), date(1_795_076_847));
+        assert_eq!(id("pas-un-id"), None);
+        assert_eq!(date_de_l_id(None), None);
     }
 
     /// L'onglet Reels d'un profil (`clips_connection`) ne donne pas la date : le reel passe sur `play_count`.

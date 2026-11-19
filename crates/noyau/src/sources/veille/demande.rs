@@ -3,7 +3,7 @@
 use super::analyse::{self, appeler, facturer, texte, HAIKU, SONNET};
 use super::{chercher, ouvrir, pause, videos_par_mot, PLATEFORMES};
 use crate::business::Business;
-use crate::collecte::{miniatures, Contexte, Navigateur};
+use crate::collecte::{miniatures, tikhub, Contexte, Navigateur};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::lecture::veille::PLAFOND_VEILLE_USD;
@@ -71,9 +71,10 @@ pub fn creer(store: &Store, business: &str, prompt: &str) -> Res<DemandeVeille> 
 
 /// Mène une demande jusqu'au bout et écrit sa fin : la synthèse, ou l'erreur qui l'a arrêtée.
 pub async fn mener(ctx: &Contexte, d: &DemandeVeille) {
-    let mut e = Enquete { ctx, d, navigateurs: HashMap::new(), cherches: 0, analyses: 0, autres: 0, essayes: vec![] };
+    let cle_tikhub = tikhub::cle(ctx).await;
+    let mut e = Enquete { ctx, d, navigateurs: HashMap::new(), cle_tikhub, cherches: 0, analyses: 0, autres: 0, essayes: vec![] };
     let r = e.enqueter().await;
-    for nav in e.navigateurs.into_values() {
+    for nav in e.navigateurs.into_values().flatten() {
         nav.fermer().await;
     }
     let fin = jour::maintenant();
@@ -90,8 +91,11 @@ pub async fn mener(ctx: &Contexte, d: &DemandeVeille) {
 struct Enquete<'a> {
     ctx: &'a Contexte,
     d: &'a DemandeVeille,
-    /// Un navigateur caché par plateforme, ouvert à sa première recherche.
-    navigateurs: HashMap<Plateforme, Box<dyn Navigateur>>,
+    /// Une entrée par plateforme déjà cherchée ; TikTok y garde son navigateur caché, ouvert à sa première recherche,
+    /// Instagram `None` : sa recherche se passe de session.
+    navigateurs: HashMap<Plateforme, Option<Box<dyn Navigateur>>>,
+    /// La clé TikHub : avec elle, la recherche et les profils passent par l'API, plus de page cachée ni de session.
+    cle_tikhub: Option<String>,
     cherches: usize,
     analyses: usize,
     autres: usize,
@@ -179,16 +183,20 @@ impl Enquete<'_> {
         }
         self.cherches += 1;
         self.noter(&format!("Recherche « {mot} » sur {}", p.nom()))?;
-        // un humain qui cherche, pas une rafale : la pause de la veille entre deux recherches d'un même site
-        if self.navigateurs.contains_key(&p) {
-            pause().await;
-        } else {
-            let nav = ouvrir(self.ctx, p).await?;
-            self.navigateurs.insert(p, nav);
+        // sans TikHub, un humain qui cherche, pas une rafale : la pause de la veille entre deux recherches d'un même site
+        if self.cle_tikhub.is_none() {
+            if let Some(nav) = self.navigateurs.get(&p) {
+                pause(nav.as_deref()).await;
+            } else {
+                let nav = if p == Plateforme::Tiktok { Some(ouvrir(self.ctx, p).await?) } else { None };
+                self.navigateurs.insert(p, nav);
+            }
         }
         let m = MotVeille { business: self.d.business.clone(), mot: mot.clone(), vues_min, actif: true, cherche: None };
         let voulues = videos_par_mot(&self.ctx.store)?;
-        let gardees = chercher(self.ctx, p, &m, voulues, self.navigateurs[&p].as_ref(), &jour::maintenant()).await?;
+        let cle = self.cle_tikhub.clone();
+        let nav = self.navigateurs.get(&p).and_then(|n| n.as_deref());
+        let gardees = chercher(self.ctx, p, &m, voulues, cle.as_deref(), nav, &jour::maintenant()).await?;
         let images: HashMap<String, String> = gardees.iter().filter_map(|t| Some((t.id(), t.image.clone()?))).collect();
         let echecs = miniatures::telecharger(&images, &self.ctx.http).await;
         if !echecs.is_empty() {

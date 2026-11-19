@@ -136,7 +136,8 @@ impl Hote for HoteApp {
             let c = Cookie::build((nom.clone(), valeur.clone())).domain(domaine.to_string()).path("/").secure(true).build();
             fenetre.set_cookie(c).map_err(|e| Erreur::Commande(format!("session de la page : {e}")))?;
         }
-        Ok(Box::new(Page { fenetre, tampon, libelle, pages: self.pages.clone() }))
+        let noms = cookies.keys().cloned().collect();
+        Ok(Box::new(Page { fenetre, tampon, libelle, noms, pages: self.pages.clone() }))
     }
 }
 
@@ -144,11 +145,21 @@ struct Page {
     fenetre: WebviewWindow,
     tampon: Arc<Tampon>,
     libelle: String,
+    /// Les noms des cookies de session posés, pour dire si la page les garde.
+    noms: Vec<String>,
     pages: Pages,
 }
 
 impl Page {
     fn executer(&self, js: &str) -> Res<()> { self.fenetre.eval(js).map_err(|e| Erreur::Commande(format!("page : {e}"))) }
+
+    /// Combien des cookies de session posés la page porte encore : un site qui refuse la session les efface.
+    fn session(&self) -> String {
+        let gardes = self.fenetre.url().ok().and_then(|u| self.fenetre.cookies_for_url(u).ok()).map(|c| {
+            self.noms.iter().filter(|n| c.iter().any(|x| x.name() == n.as_str())).count()
+        });
+        gardes.map(|g| format!(", {g}/{} cookies de session", self.noms.len())).unwrap_or_default()
+    }
 
     fn renvoyer(&self, cle: &str, expression: &str) -> String {
         format!(
@@ -185,11 +196,13 @@ impl Navigateur for Page {
     async fn ou(&self) -> String {
         *self.tampon.ou.lock() = None;
         let attendu = self.tampon.recu.notified();
-        if self.executer(&self.renvoyer("ou", "[document.title, location.pathname].filter(Boolean).join(', ')")).is_err() {
+        let lieu = "[document.title, location.pathname, document.querySelector('.captcha-verify-container') && 'captcha'].filter(Boolean).join(', ')";
+        if self.executer(&self.renvoyer("ou", lieu)).is_err() {
             return String::new();
         }
         let _ = tokio::time::timeout(Duration::from_secs(3), attendu).await;
-        self.tampon.ou.lock().take().unwrap_or_default()
+        let lieu = self.tampon.ou.lock().take().unwrap_or_default();
+        lieu + &self.session()
     }
 
     async fn fermer(&self) {

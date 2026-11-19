@@ -9,6 +9,7 @@ pub mod miniatures;
 pub mod safari;
 pub mod secrets;
 pub mod source;
+pub mod tikhub;
 pub mod ytdlp;
 
 pub use collecteur::Collecteur;

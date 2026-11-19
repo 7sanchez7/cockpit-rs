@@ -11,6 +11,9 @@ pub fn donnees() -> PathBuf {
     dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("Cockpit")
 }
 
+/// Les programmes que le cockpit télécharge lui-même (yt-dlp nightly) ; cherchés avant le PATH.
+pub fn outils() -> PathBuf { donnees().join("bin") }
+
 pub fn base() -> PathBuf { donnees().join("cockpit.sqlite") }
 
 /// Les businesses et comptes de cette machine, hors du dépôt (outils/graine.exemple.json).

@@ -1,14 +1,33 @@
 # Veille
 
-Fichiers : `crates/noyau/src/sources/veille/mod.rs` (le passage), `veille/parseurs.rs` (le JSON des pages), `veille/analyse.rs` (Claude), `veille/demande.rs` (la demande à Claude), `crates/noyau/src/collecte/hote.rs` (les traits `Hote` et `Navigateur`, le script d'écoute), `crates/app/src/hote.rs` (la page cachée de l'app), `crates/noyau/src/modeles_veille.rs` et `store_veille.rs`. Lectures : `crates/noyau/src/lecture/veille.rs`. id `veille`, cadence 6 h, reprise 3 h après un échec.
+Fichiers : `crates/noyau/src/sources/veille/mod.rs` (le passage), `veille/parseurs.rs` (le JSON des pages), `veille/instagram.rs` (la recherche Instagram sans session), `veille/analyse.rs` (Claude), `veille/demande.rs` (la demande à Claude), `crates/noyau/src/collecte/hote.rs` (les traits `Hote` et `Navigateur`, le script d'écoute), `crates/app/src/hote.rs` (la page cachée de l'app), `crates/noyau/src/modeles_veille.rs` et `store_veille.rs`. Lectures : `crates/noyau/src/lecture/veille.rs`. id `veille`, cadence 6 h, reprise 3 h après un échec.
 
 Les vidéos qui ont marché sur des mots-clés, sur TikTok et Instagram, sans suivre aucun compte : on donne un mot (« apprendre l'espagnol »), la veille cherche, garde les vidéos au-dessus d'un seuil de vues, découvre leurs comptes, mesure chaque vidéo contre la médiane de son compte, et fait regarder les meilleures par Claude Haiku 5.5.
 
-**Elle ne tourne que dans l'app.** Le navigateur caché est fourni par l'hôte (`Hote::navigateur`) ; l'hôte par défaut et `SansInterface` (la CLI, l'exemple `essai`, les tests) rendent `non_configure`, « le navigateur caché n'existe que dans l'app ». Les deux plateformes échouent alors, le passage finit en erreur.
+**Le chemin recommandé est TikHub** : une clé `TIKHUB_API_KEY` fait passer la recherche et les médianes de TikTok et d'Instagram par l'API, sans session, sans cookie, sans navigateur caché, partout (app, CLI, `essai`). Sans clé, la veille garde les chemins historiques ci-dessous, dont la recherche TikTok qui ne tourne que dans l'app.
 
-## La technique
+**La recherche TikTok ne tourne que dans l'app sans TikHub.** Le navigateur caché est fourni par l'hôte (`Hote::navigateur`) ; l'hôte par défaut et `SansInterface` (la CLI, l'exemple `essai`, les tests) rendent `non_configure`, « le navigateur caché n'existe que dans l'app ». TikTok échoue alors, le passage finit en erreur ; Instagram, qui n'a besoin d'aucun navigateur ni d'aucune session (§ Instagram sans session), tourne partout.
 
-TikTok signe ses appels de recherche (`X-Bogus`) avec un script de la page ; Instagram exige ses jetons de page (`doc_id`) et bloque les appels directs. Plutôt que de refaire ces signatures, la veille charge la vraie page dans une WebView hors écran, avec la session de l'utilisateur, et **écoute** les réponses que la page reçoit.
+## TikHub
+
+`crates/noyau/src/collecte/tikhub.rs`. La clé se lit comme les autres secrets (`ctx.secrets.valeur("TIKHUB_API_KEY", business)`) : variable d'environnement du même nom, trousseau du système, ou Secret Manager du business. Elle se crée sur `user.tikhub.io/dashboard/api`.
+
+Quand elle existe, `tikhub::chercher` et `tikhub::dernieres` remplacent, pour la veille et pour la demande à Claude, la page cachée de TikTok, DuckDuckGo et les embeds d'Instagram, et yt-dlp pour la médiane des comptes. Aucun Cookie, aucun accès complet au disque, aucun navigateur : ça marche aussi dans l'app sans session et dans `cargo run -p noyau --example essai -- Veille`.
+
+| | TikTok | Instagram |
+|---|---|---|
+| Recherche | `GET /api/v1/tiktok/app/v3/fetch_general_search_result` (`keyword`, `offset`, `count` 20, `sort_type` 0, `publish_time` 0), une page par 20 vidéos voulues | `GET /api/v1/instagram/v2/search_reels` (`keyword`), une page |
+| Profil, pour la médiane | `GET /api/v1/tiktok/app/v3/fetch_user_post_videos_v2` (`unique_id`, `count`, `sort_type` 0) | `GET /api/v1/instagram/v2/fetch_user_reels` (`username`) |
+
+L'enveloppe est `{"code":200,"data":…}` (`code` autre = erreur qui dit le message) ; `tikhub::appel` rend le `data`, décodé s'il arrive en chaîne. Les parseurs ne changent pas de contrat : `parseurs::trouvailles_objets` reconnaît les objets vidéo par leur forme, y compris la forme de l'app TikTok (`aweme_id`, `statistics.play_count`, `author.unique_id`, durée en millisecondes, `video.cover.url_list`, `video.play_addr.url_list` : `parseurs::tiktok_app`), à côté de la forme web et de l'embed Instagram.
+
+**Coût** : environ 0,001 à 0,0025 $ par requête selon l'endpoint. Un passage de veille fait au plus 4 recherches TikTok (2 pages chacune à 40 vidéos voulues) + 4 Instagram + 8 profils par plateforme, soit ~28 requêtes, quelques centimes ; à 4 passages par jour, de l'ordre de 5 à 10 $ par mois. Rien n'est appelé quand la clé manque. La veille n'utilise TikHub que pour chercher et baser ; les vidéos elles-mêmes se téléchargent toujours par `yt-dlp`, et l'analyse reste chez Claude (voir § L'analyse Claude).
+
+Le chemin sans clé reste décrit ci-dessous pour mémoire et pour le repli.
+
+## La technique, TikTok
+
+TikTok signe ses appels de recherche (`X-Bogus`) avec un script de la page, et ne répond à `/api/search/item/full/` que pour une session connectée (corps vide sans, essayé en Chromium headless et avec fenêtre, le 19 nov. 2026). Plutôt que de refaire la signature, la veille charge la vraie page dans une WebView hors écran, avec la session de l'utilisateur, et **écoute** les réponses que la page reçoit.
 
 1. `HoteApp::navigateur` (app) crée une `WebviewWindow` libellée `veille-<n>` (`PREFIXE`), 1 280 × 1 800, sans décor, hors de la barre des tâches, sans focus, placée à -30 000 px (`HORS_ECRAN`) : une fenêtre cachée laisserait le système suspendre le JS et le défilement infini ne chargerait rien. Agent : `UA_SAFARI` sur Mac (WebKit), `UA_NAVIGATEUR` ailleurs (WebView2).
 2. Le script `SCRIPT_ECOUTE` (noyau, `collecte/hote.rs`) est injecté avant tout script de la page : il enveloppe `fetch` et `XMLHttpRequest`, et chaque réponse dont l'URL contient un des filtres part vers l'app par la commande `plugin:veille|message` (`commandes::message`, plugin `veille` de `main.rs`). La capacité `crates/app/capabilities/veille.json` n'autorise cette commande qu'aux fenêtres `veille-*`, et seulement depuis les pages de TikTok, Instagram et Facebook. `Pages::recevoir` range le texte dans le `Tampon` de la page.
@@ -20,27 +39,40 @@ D'où vient la session (`Hote::cookies`, `HoteApp::cookies`) : sur Mac, les cook
 
 | | TikTok | Instagram |
 |---|---|---|
-| Recherche (`recherche`) | `https://www.tiktok.com/search/video?q=<mot>` | `https://www.instagram.com/explore/search/keyword/?q=<mot>` |
-| Lecture | `lire(url, 6, 3)` | `lire(url, 6, 3)` |
-| Profil, pour la médiane (`dernieres`) | `yt-dlp`, 20 vidéos au plus, sur `https://www.tiktok.com/@<compte>` (`ytdlp::liste`, sans session) | `https://www.instagram.com/<compte>/reels/` dans la page cachée, `lire(url, 5, 1)`, filtré sur le compte car la page charge aussi le fil d'accueil |
-| Filtres (`ouvrir`) | `/api/search/` | `/api/v1/`, `/graphql` |
+| Recherche | page cachée sur `https://www.tiktok.com/search/video?q=<mot>` (`recherche`), `lire(url, 6, N / 5)`, session `sessionid` | DuckDuckGo lite puis l'embed de chaque reel (`instagram::chercher`), sans session ni navigateur |
+| Profil, pour la médiane (`dernieres`) | `yt-dlp`, 20 vidéos au plus, sur `https://www.tiktok.com/@<compte>` (`ytdlp::liste`, sans session) ; les abonnés viennent de la page publique du compte (`abonnes_tiktok`, `tiktok::profil`), yt-dlp ne les donne pas | `https://www.instagram.com/<compte>/reels/` dans la page cachée, `lire(url, 5, 1)`, filtré sur le compte car la page charge aussi le fil d'accueil ; **session seulement** : sans session, `Erreur::NonConfigure`, `baser_comptes` saute la plateforme sans erreur |
+| Filtres (`ouvrir`) | `/api/search/` | `/api/v1/`, `/graphql` (pour la page Reels) |
 
 Les parseurs (`parseurs::trouvailles`) ne suivent pas un chemin fixe : `objets` découpe chaque corps (une ou plusieurs lignes JSON), `parcourir` visite tout l'arbre, et `parseurs::tiktok` ou `parseurs::instagram` reconnaissent un objet vidéo à sa forme. Une même vidéo vue deux fois est fusionnée (`Trouvaille::fusion`, compteurs au plus haut). `trouvailles_liste` convertit une liste yt-dlp.
 
-**Ce qu'on ne fait pas** : résoudre un captcha, se connecter à la place de l'utilisateur, aller plus vite qu'un humain. Au plus 4 mots (`MOTS_PAR_PASSAGE`) et 8 profils (`COMPTES_PAR_PASSAGE`) par plateforme et par passage, 20 à 40 s entre deux pages (`PAUSE`), un passage toutes les 6 h. Un captcha ou une page de connexion donne « aucune réponse capturée (page : <titre, chemin>) ».
+## Instagram sans session
+
+La recherche d'Instagram exige une session et ses jetons de page ; on la contourne en deux temps, sans cookie (`veille/instagram.rs`) :
+
+1. **Découverte** : `POST https://lite.duckduckgo.com/lite/` avec `q=site:instagram.com/reel <mot>` et `df=m` (le dernier mois). Une page de résultats, une dizaine de reels triés par pertinence, pas par date (`lire_codes` : les liens `/reel/<code>/`, `/<compte>/reel/<code>/`, `/reels/<code>/` et `/p/<code>/`, une fois chacun, les pubs `duckduckgo.com/y.js` écartées). Aucun lien : « DuckDuckGo n'a donné aucun reel (limite atteinte ou mot sans résultat) ».
+2. **Détail** : `GET https://www.instagram.com/reel/<code>/embed/captioned/` pour chaque code, l'un après l'autre. La page porte `"contextJSON":"…"` (un JSON dans une chaîne JSON, `lire_embed`), lu par `parseurs::instagram` : compte, abonnés (`edge_followed_by`), vues (`video_view_count`), likes (`edge_liked_by`), commentaires, légende, miniature. **La date vient de l'id** du média : `((id >> 23) + 1 314 220 021 721) / 1000` (`date_de_l_id`), l'embed n'en donne pas. Un 429 arrête les embeds suivants.
+
+Limites à connaître : une dizaine de reels par mot, quel que soit le curseur `veille.videos` ; ni partages ni enregistrements (Instagram ne les expose pas) ; `video_view_count` parfois nul, et très bas sur les reels de moins de deux jours, d'où le repli de `garde` sur les likes (`vues_min / 50`) ; DuckDuckGo répond 202 quand on insiste (limite), le reel suivant attend alors le passage suivant. Essayé de bout en bout le 19 nov. 2026 sur « apprendre l'espagnol » : 10 reels complets en 7 s.
+
+**Ce qu'on ne fait pas** : résoudre un captcha, se connecter à la place de l'utilisateur, aller plus vite qu'un humain. Au plus 4 mots (`MOTS_PAR_PASSAGE`) et 8 profils (`COMPTES_PAR_PASSAGE`) par plateforme et par passage, un passage toutes les 6 h. Entre deux pages cachées 20 à 40 s (`PAUSE`), entre deux requêtes sans page 3 à 6 s (`PAUSE_SANS_PAGE`). Un captcha ou une page de connexion devant TikTok donne « aucune réponse capturée (page : <titre, chemin>) ».
 
 ## Le passage
 
 1. Les mots actifs des business suivis (`Store::mots_veille`, table `veille_mot`), triés par `cherche` (jamais cherché d'abord), les 4 premiers. Aucun mot : `non_configure`, « aucun mot-clé de veille, en ajouter dans l'écran Veille ».
-2. TikTok et Instagram **en même temps** (`passer`, réunies par `join_all`) : chaque plateforme ouvre sa page (`ouvrir`), puis `parcourir` :
-   - chaque mot : la recherche, défilée N / 5 fois (`VIDEOS_PAR_DEFILEMENT`), N étant le curseur de l'écran Veille (`veille.videos`, `videos_par_mot`, de 10 à 100 par pas de 10, 40 par défaut, lu au début du passage). Ni TikTok ni Instagram ne trient par date sur le web : on lit large, puis `retenir` garde les N plus récentes parmi celles que `garde` accepte (vues ≥ `vues_min` du mot, ou, quand la recherche ne donne pas les vues (Instagram), likes ≥ `vues_min / 50`), les vidéos sans date en dernier. Chaque vidéo gardée écrit `veille_video`, son relevé et son compte (`Store::trouvaille`), dans un `store.lot` ;
-   - les 8 comptes sans médiane ou dont la médiane a plus de 7 jours, ceux des plus grosses vidéos d'abord (`Store::comptes_a_baser`) : leurs dernières vidéos (`dernieres`), la médiane (`ScoreVeille::mediane`), `Store::base` et un nouveau relevé des vidéos déjà en base (`Store::relever`). Instagram fait une pause avant chaque profil, TikTok non (yt-dlp ne passe pas par la page).
-3. `Store::cherche` met `cherche` à maintenant pour les mots du passage.
-4. Les **percées** : une vidéo publiée il y a moins de 48 h que `ScoreVeille::percee` retient écrit une ligne du fil `veille:<id>`, type `VEILLE`, avec le lien de la vidéo. Texte (`percee`) : « @compte · 120 k vues, 6× sa médiane · « mot » ».
-5. Les miniatures absentes du cache (`miniatures::telecharger`, clé = id de la vidéo), puis l'effacement des vidéos téléchargées depuis plus de 14 jours (`analyse::nettoyer_videos`).
-6. L'analyse Claude (`analyse::analyser`).
+2. `yt-dlp` mis à jour (`ytdlp::tenir_a_jour`, § yt-dlp nightly ; un échec s'ajoute aux échecs du passage sans l'arrêter).
+3. TikTok et Instagram **en même temps** (`passer`, réunies par `join_all`). Avec une clé TikHub, aucune page n'est ouverte : `chercher` et `dernieres` appellent l'API (§ TikHub), sans pause. Sans clé, TikTok ouvre sa page cachée (`ouvrir`, sans session : seule sa médiane passe), Instagram n'ouvre rien ; puis, par plateforme :
+   - chaque mot : sans TikHub, TikTok défile la recherche N / 5 fois (`VIDEOS_PAR_DEFILEMENT`), N étant le curseur de l'écran Veille (`veille.videos`, `videos_par_mot`, de 10 à 100 par pas de 10, 40 par défaut, lu au début du passage) ; Instagram, `instagram::chercher`. Aucune des deux ne trie par date : on lit large, puis `retenir` garde les N plus récentes parmi celles que `garde` accepte (vues ≥ `vues_min` du mot, ou, quand la recherche ne donne pas les vues (Instagram), likes ≥ `vues_min / 50`), les vidéos sans date en dernier. Chaque vidéo gardée écrit `veille_video`, son relevé et son compte (`Store::trouvaille`), dans un `store.lot` ;
+   - les 8 comptes sans médiane ou dont la médiane a plus de 7 jours, ceux des plus grosses vidéos d'abord (`Store::comptes_a_baser`) : leurs dernières vidéos (`dernieres`, TikHub ou yt-dlp et page selon la clé), la médiane (`ScoreVeille::mediane`), `Store::base` et un nouveau relevé des vidéos déjà en base (`Store::relever`). Sans TikHub, Instagram (session seulement) fait une pause avant chaque profil, TikTok non (yt-dlp ne passe pas par la page).
+4. `Store::cherche` met `cherche` à maintenant pour les mots du passage.
+5. Les **percées** : une vidéo publiée il y a moins de 48 h que `ScoreVeille::percee` retient écrit une ligne du fil `veille:<id>`, type `VEILLE`, avec le lien de la vidéo. Texte (`percee`) : « @compte · 120 k vues, 6× sa médiane · « mot » ».
+6. Les miniatures absentes du cache (`miniatures::telecharger`, clé = id de la vidéo), puis l'effacement des vidéos téléchargées depuis plus de 14 jours (`analyse::nettoyer_videos`).
+7. L'analyse Claude (`analyse::analyser`).
 
 Un mot, un profil ou une analyse en échec n'arrête pas le reste ; le passage finit en erreur après avoir tout écrit (« N échecs : a ; b ; … »). Le nombre de lignes rendu compte les vidéos gardées et les comptes basés.
+
+## yt-dlp nightly
+
+TikTok casse yt-dlp en quelques semaines : la stable 2026.10.26 échoue sur les profils (« Failed to parse JSON ») là où le nightly 2026.11.17 les lit, sans session. `ytdlp::tenir_a_jour` garde donc un nightly dans `chemins::outils()` (`<données>/bin/yt-dlp[.exe]`, `~/Library/Application Support/Cockpit/bin` sur Mac), téléchargé depuis `https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/<fichier>` (`yt-dlp_macos`, `yt-dlp.exe`, `yt-dlp_linux`, `yt-dlp_linux_aarch64`, environ 37 Mo sur Mac), renouvelé quand il a plus de 3 jours (`FRAICHEUR`). Il est écrit à côté sous un autre nom, doit répondre à `--version`, puis remplace l'ancien : un binaire tronqué ne casse rien. `commande::trouver` cherche ce dossier avant le PATH. Appelé au début de chaque passage de la Veille et de TikTok ; un verrou évite deux téléchargements à la fois. Pas de téléchargement sur un système sans fichier correspondant.
 
 ## Le score
 
@@ -77,7 +109,7 @@ Une consigne libre tapée dans l'écran Veille (« Trouve des vidéos scriptées
 
 1. **Les mots-clés, par Sonnet 5.5** (`SONNET`, `corps_mots`) : un seul appel, `effort: medium`, réponse en `json_schema` (`schema_mots`) : de 4 à 8 recherches (`MOTS_MAX`), chacune avec sa plateforme et une phrase de pourquoi. La consigne (`consigne_mots`) donne la demande, le business et les mots déjà suivis. Sonnet 5.5 refuse `thinking: disabled` : le champ est omis, sa réflexion reste adaptative. `lire_mots` écarte les vides, les doublons (même plateforme, casse ignorée) et les plateformes inconnues ; aucun mot : « Sonnet n'a proposé aucun mot-clé ».
 2. **La boucle, par Haiku 5.5** (`HAIKU`, `corps_boucle`, `systeme`) : la demande et la méthode en system, les mots de Sonnet en premier message, puis une boucle d'outils menée à la main, 30 tours au plus (`TOURS_MAX`), 8 000 tokens de sortie et 180 s par appel. `cache_control` est posé à la racine : chaque tour relit le précédent au prix du cache. Les outils (`outils`) :
-   - `chercher(mot, plateforme, vues_min)` : la même recherche qu'un passage (`chercher` de `veille/mod.rs`, dans la page cachée de la plateforme, ouverte à sa première recherche, `pause` entre deux recherches d'un même site), N vidéos les plus récentes au-dessus de `vues_min` (10 000 par défaut, `VUES_MIN`), N étant le curseur `veille.videos`. Les vidéos gardées s'écrivent dans `veille_video` sous ce mot, comme celles d'un passage, et leurs miniatures sont téléchargées. Haiku reçoit une fiche par vidéo (`fiche` : id, compte, date, compteurs, ratio, durée, légende coupée à 160 caractères, `analysee`). 8 recherches au plus (`CHERCHES_MAX`) ;
+   - `chercher(mot, plateforme, vues_min)` : la même recherche qu'un passage (`chercher` de `veille/mod.rs` : la page cachée de TikTok, ouverte à sa première recherche ; DuckDuckGo et les embeds pour Instagram ; `pause` entre deux recherches d'un même site), N vidéos les plus récentes au-dessus de `vues_min` (10 000 par défaut, `VUES_MIN`), N étant le curseur `veille.videos`. Les vidéos gardées s'écrivent dans `veille_video` sous ce mot, comme celles d'un passage, et leurs miniatures sont téléchargées. Haiku reçoit une fiche par vidéo (`fiche` : id, compte, date, compteurs, ratio, durée, légende coupée à 160 caractères, `analysee`). 8 recherches au plus (`CHERCHES_MAX`) ;
    - `analyser(id)` : l'analyse d'un passage (`analyse::analyser_une`), écrite dans `veille_analyse` ; une vidéo déjà analysée rend son analyse sans appel. 10 au plus (`ANALYSES_MAX`) ;
    - `autres_mots(raison)` : relance Sonnet avec les recherches déjà faites et ce qui manque, 2 fois au plus (`AUTRES_MOTS_MAX`) ;
    - `retenir(id, raison)` : écrit `veille_retenue` (`Store::retenir_video`) ; seulement une vidéo déjà en base.
@@ -90,11 +122,13 @@ Une consigne libre tapée dans l'écran Veille (« Trouve des vidéos scriptées
 
 ## Ce qui peut casser
 
-- Sur Mac, l'app sans accès complet au disque (Réglages Système > Confidentialité et sécurité) ne lit pas les cookies de Safari : « Safari illisible », et chaque recherche, d'un passage ou d'une demande, échoue. Un bundle signé ad hoc (`cargo tauri build --debug`) change de signature à chaque build et perd cet accès ; signé par un certificat Apple Development, il le garde ([`runbook.md`](../runbook.md) § Installer).
-- Pas de session (Safari expiré sur Mac, fenêtre de connexion jamais ouverte ailleurs) : `Hote::cookies` rend `non_configure`, la plateforme est sautée avec son message, l'autre continue.
-- La page change ses chemins d'API : plus rien ne passe les filtres, « aucune réponse capturée ». Regarder les requêtes de la page dans un navigateur, mettre à jour les filtres dans `ouvrir`.
-- La page change la forme de ses objets : ajouter le nouveau nom de champ dans `parseurs::tiktok` ou `parseurs::instagram`, et un exemple figé dans leurs tests.
-- yt-dlp ne lit plus les profils TikTok : le mettre à jour, l'erreur de chaque compte est dans le message du passage.
-- Instagram bloque l'adresse : la reprise de 3 h évite d'entretenir le blocage.
+- **Avec TikHub** : clé absente, invalide ou sans crédit, TikHub répond `code` différent de 200 ou un HTTP d'erreur, la recherche (ou le profil) du mot échoue et s'ajoute aux échecs du passage ; les autres mots continuent. Une clé absente n'est pas une panne : la veille retombe sur les chemins sans TikHub. L'API change un chemin ou un nom de champ : mettre à jour `tikhub.rs` ou `parseurs::tiktok_app`, avec un exemple figé dans leurs tests. Les vidéos se téléchargent toujours par `yt-dlp`, donc une casse de `yt-dlp` n'empêche que l'analyse, pas la découverte.
+- Sur Mac, l'app sans accès complet au disque (Réglages Système > Confidentialité et sécurité) ne lit pas les cookies de Safari : « Safari illisible », et chaque recherche TikTok, d'un passage ou d'une demande, échoue (celle d'Instagram n'a pas besoin de Safari). Sans TikHub seulement. Un bundle signé ad hoc (`cargo tauri build --debug`) change de signature à chaque build et perd cet accès ; signé par un certificat Apple Development, il le garde ([`runbook.md`](../runbook.md) § Installer).
+- Pas de session (Safari expiré sur Mac, fenêtre de connexion jamais ouverte ailleurs) : `Hote::cookies` rend `non_configure`, la recherche TikTok est sautée avec son message, Instagram continue ; la médiane TikTok passe quand même par yt-dlp, celle d'Instagram est sautée en silence. Sans TikHub seulement.
+- La page change ses chemins d'API : plus rien ne passe les filtres, « aucune réponse capturée ». Regarder les requêtes de la page dans un navigateur, mettre à jour les filtres dans `ouvrir`. Sans TikHub seulement.
+- La page change la forme de ses objets : ajouter le nouveau nom de champ dans `parseurs::tiktok`, `parseurs::tiktok_app` ou `parseurs::instagram`, et un exemple figé dans leurs tests.
+- yt-dlp ne lit plus les profils TikTok : le nightly est renouvelé tous les 3 jours (§ yt-dlp nightly) ; si GitHub est injoignable, l'échec est dans le message du passage et l'ancien binaire reste utilisé. L'erreur de chaque compte est dans le même message. Sans TikHub seulement.
+- DuckDuckGo ne rend plus de reels (202, page changée) ou l'embed d'Instagram change de forme (`contextJSON`) : la recherche Instagram échoue avec « DuckDuckGo n'a donné aucun reel » ou « aucun des N reels n'est lisible dans son embed ». Les exemples figés sont dans les tests de `instagram.rs` et de `parseurs.rs`. Sans TikHub seulement.
+- Instagram bloque l'adresse : la reprise de 3 h évite d'entretenir le blocage. Sans TikHub seulement.
 - `ffmpeg`, `ffprobe` ou `yt-dlp` absent : l'analyse échoue, retentée au passage suivant ; `transcrire` absent : analyse sur les images.
 - Plafond de 50 $ atteint : le relever dans `lecture::veille::PLAFOND_VEILLE_USD` (lu par la source, la CLI et l'écran) seulement sur décision de l'utilisateur.
