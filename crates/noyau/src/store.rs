@@ -30,6 +30,9 @@ impl Store {
     /// Une base en mémoire, pour les tests.
     pub fn memoire() -> Res<Store> { Self::avec(Database::memoire()?, None) }
 
+    /// Une base en mémoire semée avec une graine, pour les tests.
+    pub fn memoire_avec(graine: &Path) -> Res<Store> { Self::avec(Database::memoire()?, Some(graine)) }
+
     fn avec(db: Database, graine: Option<&Path>) -> Res<Store> {
         db.script(schema::SQL)?;
         for (table, colonne, definition) in schema::COLONNES {

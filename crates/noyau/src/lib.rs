@@ -5,6 +5,8 @@ pub mod collecte;
 pub mod db;
 pub mod dimension;
 pub mod erreur;
+#[cfg(test)]
+pub mod essai;
 pub mod jour;
 pub mod lecture;
 pub mod metrique;
