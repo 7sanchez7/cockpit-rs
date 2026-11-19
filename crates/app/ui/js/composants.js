@@ -5,6 +5,7 @@
 //   s(tag, attrs, ...enfants)       pareil en SVG
 //   rendu                           { calme, memoire, miniatures } : calme pendant un re-rendu (ni entrée ni tracé rejoués)
 //   sobre()                         vrai si le système demande moins d'animations
+//   tracer(path)                    dessine un trait de pathLength 1 (sans tiret gardé : WebKit le casse)
 //   entree(el, rang)                l'entrée décalée d'un bloc (fondu, glisse, flou)
 //   glisseur(conteneur)             une pilule qui glisse vers l'élément actif, un enfant direct : .aller(el | null)
 //   teinte(cle), couleurTon(ton), couleurPlateforme(p)   des couleurs CSS (`var(--aqua)`)
@@ -353,9 +354,10 @@ function chemin(valeurs, y) {
   return d;
 }
 
-function tracer(path) {
+/** Dessine un trait de `pathLength` 1. Le tiret ne vit que le temps du tracé : WebKit coupe en tirets un trait non-scaling-stroke. */
+export function tracer(path) {
   if (rendu.calme || sobre()) return;
-  path.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: nombreJeton("--duree-trace"), easing: jeton("--courbe-trace") });
+  path.animate([{ strokeDasharray: 1, strokeDashoffset: 1 }, { strokeDasharray: 1, strokeDashoffset: 0 }], { duration: nombreJeton("--duree-trace"), easing: jeton("--courbe-trace") });
 }
 
 function devoiler(el) {
@@ -373,7 +375,7 @@ export function sparkline(valeurs, { ton = "neutre", couleur, inverse = false, l
     const r = (v - min) / pas;
     return marge + (inverse ? r : 1 - r) * (100 - 2 * marge);
   };
-  const path = s("path", { d: chemin(valeurs, y), pathLength: 1, "stroke-dasharray": 1 });
+  const path = s("path", { d: chemin(valeurs, y), pathLength: 1 });
   el.append(s("svg", { viewBox: "0 0 100 100", preserveAspectRatio: "none" }, path));
   tracer(path);
   const dernier = valeurs.findLastIndex((v) => v != null);

@@ -1,7 +1,7 @@
 // Le héros de l'accueil : le revenu de la période, son écart, et la courbe du revenu cumulé jour par jour
 // (aire lissée, axe en euros à gauche, viseur et bulle au survol, dernier point marqué).
 
-import { h, s, pastille, enTetePanneau, couleurTon, vide, rendu, sobre, jeton, nombreJeton } from "../../composants.js";
+import { h, s, pastille, enTetePanneau, couleurTon, vide, tracer, nombreJeton } from "../../composants.js";
 import * as F from "../../format.js";
 import { piluleMenu, lienSecondaire } from "./outils.js";
 
@@ -59,10 +59,7 @@ function courbe(points) {
     s("path", { class: "heros-aire", d: `${ligne}L100,100L0,100Z`, fill: `url(#${id})` }),
     trait,
   );
-  // le tiret ne vit que le temps du tracé : WebKit coupe un trait en tirets avec non-scaling-stroke
-  if (!rendu.calme && !sobre()) {
-    trait.animate([{ strokeDasharray: 1, strokeDashoffset: 1 }, { strokeDasharray: 1, strokeDashoffset: 0 }], { duration: nombreJeton("--duree-trace"), easing: jeton("--courbe-trace") });
-  }
+  tracer(trait);
 
   const dernier = h("i", { class: "heros-point dernier", style: { left: x(n - 1) + "%", top: pts[n - 1][1] + "%" } });
   const viseur = h("div", { class: "heros-viseur" });
