@@ -1,6 +1,6 @@
 //! L'analyse d'une vidéo par Claude Haiku : Claude ne lit pas la vidéo, on lui donne des images clés (ffmpeg) et ce
-//! qui est dit (`transcrire`, whisper.cpp en local, facultatif). Seulement les outliers, 3 par passage, sous un
-//! plafond de dépense ; un business sans clé n'a pas d'analyse, sans erreur.
+//! qui est dit (`transcrire`, whisper.cpp en local, facultatif). Les vidéos à au moins 2× la médiane de leur compte, les
+//! plus récentes d'abord, 10 par passage, sous un plafond de dépense ; un business sans clé n'a pas d'analyse, sans erreur.
 use super::ANALYSES_PAR_PASSAGE;
 use crate::collecte::http::{Http, Requete, UA_NAVIGATEUR};
 use crate::collecte::{commande, Contexte};
@@ -26,14 +26,12 @@ pub const SUITE: [f64; 3] = [0.35, 0.6, 0.85];
 /// Les vidéos téléchargées sont effacées après 14 jours.
 pub const GARDER_VIDEOS_JOURS: i64 = 14;
 
-/// Analyse les outliers des 14 derniers jours qui n'en ont pas encore ; rend les échecs.
+/// Analyse les vidéos des 14 derniers jours qui n'en ont pas encore ; rend les échecs.
 pub async fn analyser(ctx: &Contexte, maintenant: &Date) -> Vec<String> {
-    let mut a_faire: Vec<VideoVeille> = match ctx.store.videos_veille("where a.video is null and v.trouvee >= ?", p![*maintenant - Duration::days(14)]) {
-        Ok(v) => v.into_iter().filter(VideoVeille::outlier).collect(),
+    let a_faire = match ctx.store.videos_veille("where a.video is null and v.trouvee >= ?", p![*maintenant - Duration::days(14)]) {
+        Ok(v) => a_analyser(v),
         Err(e) => return vec![format!("analyses : {e}")],
     };
-    a_faire.sort_by(|a, b| b.ratio().unwrap_or(0.0).total_cmp(&a.ratio().unwrap_or(0.0)));
-    a_faire.truncate(ANALYSES_PAR_PASSAGE);
     let mut echecs = vec![];
     for v in &a_faire {
         let Some(b) = ctx.businesses.iter().find(|b| b.id == v.business) else { continue };
@@ -61,6 +59,15 @@ pub async fn analyser(ctx: &Contexte, maintenant: &Date) -> Vec<String> {
         }
     }
     echecs
+}
+
+/// Les vidéos qui valent une analyse (`VideoVeille::a_analyser`), les plus récemment publiées d'abord, puis les plus
+/// gros ratios ; `ANALYSES_PAR_PASSAGE` au plus.
+pub fn a_analyser(videos: Vec<VideoVeille>) -> Vec<VideoVeille> {
+    let mut a_faire: Vec<VideoVeille> = videos.into_iter().filter(VideoVeille::a_analyser).collect();
+    a_faire.sort_by(|a, b| b.publiee.cmp(&a.publiee).then_with(|| b.ratio().unwrap_or(0.0).total_cmp(&a.ratio().unwrap_or(0.0))));
+    a_faire.truncate(ANALYSES_PAR_PASSAGE);
+    a_faire
 }
 
 async fn analyser_une(ctx: &Contexte, v: &VideoVeille, cle: &str, formats: &[String], maintenant: &Date) -> Res<()> {
@@ -301,6 +308,25 @@ pub mod tests {
             blocs: Blocs { hook: "a".into(), confirmation: "b".into(), valeur: "c".into(), placement: "absent".into(), fin: "d".into() },
             ecart: "Plus court".into(), adaptable: 3, idee: "Les 3 erreurs de ser et estar".into(),
         }
+    }
+
+    #[test]
+    fn les_plus_recentes_d_abord() {
+        use crate::modeles::Plateforme;
+        use crate::modeles_veille::Trouvaille;
+        use crate::store::Store;
+        use chrono::{TimeZone, Utc};
+        let t0 = Utc.timestamp_opt(1_800_000_000, 0).unwrap();
+        let store = Store::memoire().unwrap();
+        // (id, publiée il y a n jours, vues) pour une médiane de 10 000
+        for (id, jours, vues) in [("vieille", 9, 90_000), ("recente", 1, 25_000), ("moyenne", 4, 40_000), ("faible", 0, 15_000)] {
+            let mut t = Trouvaille::nouvelle(Plateforme::Tiktok, id, "profe.ana");
+            (t.publiee, t.vues) = (Some(t0 - Duration::days(jours)), Some(vues));
+            store.trouvaille(&t, "roleo", None, &t0).unwrap();
+        }
+        store.base(Plateforme::Tiktok, "profe.ana", Some(10_000), 20, None, &t0).unwrap();
+        let ids: Vec<String> = a_analyser(store.videos_veille("", p![]).unwrap()).into_iter().map(|v| v.id).collect();
+        assert_eq!(ids, ["recente", "moyenne", "vieille"]);
     }
 
     #[test]

@@ -4,6 +4,7 @@
 //   ecouter(nom, fn) -> Promise<arrêt>  un événement Tauri ("cockpit", "ecran"), fn reçoit le payload
 //   lien(url)                          ouvre une adresse http(s) dans le navigateur, par la commande `lien`
 //   image(dossier, cle) -> url          une image du cache local (clé `icone:123`, `avatar:tiktok:x`) servie par asset:
+//   fichier(chemin) -> url              un fichier du cache local servi par asset: (une vidéo de la Veille)
 //   toast(texte)                       un message d'erreur discret, en bas à droite
 //   fenetre()                          la fenêtre courante (réduire, agrandir, fermer, glisser)
 
@@ -55,7 +56,12 @@ export function lien(url) {
 
 export function image(dossier, cle) {
   const sep = dossier.includes("\\") ? "\\" : "/";
-  return tauri.core.convertFileSrc(dossier + sep + cle.replace(/[:/]/g, "_"));
+  return fichier(dossier + sep + cle.replace(/[:/]/g, "_"));
+}
+
+/** L'URL `asset:` d'un fichier du cache, pour une image ou une vidéo. */
+export function fichier(chemin) {
+  return tauri.core.convertFileSrc(chemin);
 }
 
 export function fenetre() {

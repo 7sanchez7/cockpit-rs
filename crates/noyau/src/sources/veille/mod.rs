@@ -18,7 +18,13 @@ use std::time::Duration as Delai;
 pub const MOTS_PAR_PASSAGE: usize = 4;
 /// Les profils visités pour leur médiane, par plateforme et par passage.
 pub const COMPTES_PAR_PASSAGE: i64 = 8;
-pub const ANALYSES_PAR_PASSAGE: usize = 3;
+/// Les analyses Claude par passage, les plus récentes d'abord : 40 par jour au plus.
+pub const ANALYSES_PAR_PASSAGE: usize = 10;
+/// Les défilements d'une page de recherche : ni TikTok ni Instagram ne trient par date sur le web, on va chercher
+/// plus loin pour remonter assez de vidéos récentes.
+pub const DEFILEMENTS_RECHERCHE: u32 = 8;
+/// Au-delà, une vidéo trouvée par la recherche est écartée : la veille dit ce qui marche maintenant.
+pub const RECENTE_JOURS: i64 = 30;
 /// La pause entre deux pages, en secondes : un humain qui cherche, pas une rafale.
 pub const PAUSE: (f64, f64) = (20.0, 40.0);
 pub const PLATEFORMES: [Plateforme; 2] = [Plateforme::Tiktok, Plateforme::Instagram];
@@ -134,11 +140,11 @@ async fn parcourir(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], nav:
 
 /// Une recherche : les vidéos gardées, écrites en base.
 async fn chercher(ctx: &Contexte, p: Plateforme, m: &MotVeille, nav: &dyn Navigateur, maintenant: &Date) -> Res<Vec<Trouvaille>> {
-    let trouvees = parseurs::trouvailles(p, &nav.lire(&recherche(p, &m.mot), 6.0, 3).await?);
+    let trouvees = parseurs::trouvailles(p, &nav.lire(&recherche(p, &m.mot), 6.0, DEFILEMENTS_RECHERCHE).await?);
     if trouvees.is_empty() {
         return Err(format_err(format!("aucune réponse capturée (page : {})", nav.ou().await)));
     }
-    let gardees: Vec<Trouvaille> = trouvees.into_iter().filter(|t| garde(t, m.vues_min)).collect();
+    let gardees: Vec<Trouvaille> = trouvees.into_iter().filter(|t| garde(t, m.vues_min, maintenant)).collect();
     ctx.store.lot(|| {
         for t in &gardees {
             ctx.store.trouvaille(t, &m.business, Some(&m.mot), maintenant)?;
@@ -238,8 +244,12 @@ fn compact(n: i64) -> String {
     format!("{}\u{a0}{}", decimale(arrondi(v)), UNITES[i])
 }
 
-/// Garde une vidéo à partir de `vues_min` vues ; sans vues (recherche Instagram), à partir de `vues_min / 50` likes.
-pub fn garde(t: &Trouvaille, vues_min: i64) -> bool {
+/// Garde une vidéo publiée depuis moins de `RECENTE_JOURS` (ou sans date), à partir de `vues_min` vues ; sans vues
+/// (recherche Instagram), à partir de `vues_min / 50` likes.
+pub fn garde(t: &Trouvaille, vues_min: i64, maintenant: &Date) -> bool {
+    if t.publiee.is_some_and(|d| *maintenant - d > Duration::days(RECENTE_JOURS)) {
+        return false;
+    }
     match t.vues {
         Some(vues) => vues >= vues_min,
         None => t.likes.unwrap_or(0) >= vues_min / 50,
@@ -258,12 +268,22 @@ mod tests {
     fn garde_les_vues_ou_les_likes() {
         let mut t = Trouvaille::nouvelle(Plateforme::Instagram, "A", "x");
         t.vues = Some(19_999);
-        assert!(!garde(&t, 20_000));
+        assert!(!garde(&t, 20_000, &t0()));
         t.vues = None;
         t.likes = Some(400);
-        assert!(garde(&t, 20_000));
+        assert!(garde(&t, 20_000, &t0()));
         t.likes = Some(399);
-        assert!(!garde(&t, 20_000));
+        assert!(!garde(&t, 20_000, &t0()));
+    }
+
+    #[test]
+    fn garde_les_recentes() {
+        let mut t = Trouvaille::nouvelle(Plateforme::Tiktok, "A", "x");
+        t.vues = Some(50_000);
+        t.publiee = Some(t0() - Duration::days(RECENTE_JOURS));
+        assert!(garde(&t, 20_000, &t0()));
+        t.publiee = Some(t0() - Duration::days(RECENTE_JOURS + 1));
+        assert!(!garde(&t, 20_000, &t0()));
     }
 
     #[test]

@@ -26,7 +26,7 @@ La référence est celle de la version macOS : un **terminal de marché noir et 
 | Texte | `--texte` F5F5F4, `--secondaire` A1A1A6, `--tertiaire` 66666C ; `--accent` = `--texte` |
 | États | `--succes` 4ADE80, `--ambre` FBBF24, `--danger` F87171 |
 | Catégories | `--orange` D95926, `--bleu` 3987E5, `--aqua` 199E70, `--violet` 9085E9. `teinte(cle)` (`js/composants.js`) lit la teinte d'un business sous son ancien nom (`menthe` aqua, `ciel` bleu, `lilas` violet, `ambre` orange, aqua par défaut) ; `couleurPlateforme(p)` : TikTok aqua, Instagram violet, YouTube orange, Facebook bleu |
-| Blanc | `--blanc-bord`, `--blanc-bord-fort`, `--blanc-bloc`, `--blanc-ligne`, `--blanc-survol`, `--blanc-pilule`, `--blanc-actif`, `--blanc-selection`, `--blanc-fantome`, `--blanc-barre`, `--blanc-repere`, `--blanc-grille`, `--blanc-serie`, `--blanc-trait`, `--blanc-halo` ; `--noir-ombre`, `--voile` (sous la palette) |
+| Blanc | `--blanc-bord`, `--blanc-bord-fort`, `--blanc-bloc`, `--blanc-ligne`, `--blanc-survol`, `--blanc-pilule`, `--blanc-actif`, `--blanc-selection`, `--blanc-fantome`, `--blanc-barre`, `--blanc-repere`, `--blanc-grille`, `--blanc-serie`, `--blanc-trait`, `--blanc-halo` ; `--noir-ombre`, `--voile` (sous la palette et le lecteur), `--voile-stats` (les chiffres au survol d'une case de la Veille) |
 | Dégradés, ombres | `--lueur`, `--reflet`, `--arete`, `--lavis` (aire sous une courbe), `--degrade-heros` ; `--ombre-verre`, `--halo-actif`, `--halo-nav`, `--halo-heros`, `--halo-barre` |
 | Traits | `--trait` 2px (une courbe), `--trait-case`, `--filet` 1px, `--viseur`, `--trait-icone` |
 | Rayons `--r-*` | `panneau` 20, `carte` 18, `bloc` 14, `bouton` 12, `tache` 11, `ligne` 10, `avatar` 8, `barre` 4, `legende` 3, `capsule` |
@@ -72,7 +72,7 @@ La liste exacte et les options de chacun sont en tête du fichier ; les styles d
 | `ligneFil`, `caseRonde` | une ligne du fil, une case de tâche |
 | `icone(nom)` | les icônes de la barre et des écrans, en traits sur une grille de 24 |
 
-Aucune image n'est chargée par le réseau depuis l'interface : miniatures, avatars et icônes d'apps sont téléchargés par les sources dans le cache disque (`noyau::collecte::miniatures`), et l'interface les lit par le protocole `asset` (`ctx.image(cle)`). La CSP n'ouvre que les images de `*.mzstatic.com`.
+Aucune image n'est chargée par le réseau depuis l'interface : miniatures, avatars et icônes d'apps sont téléchargés par les sources dans le cache disque (`noyau::collecte::miniatures`), et l'interface les lit par le protocole `asset` (`ctx.image(cle)`) ; les vidéos de la Veille aussi (`ctx.fichier(chemin)`). La CSP n'ouvre que les images de `*.mzstatic.com`.
 
 ## Mouvement
 

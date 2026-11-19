@@ -8,6 +8,7 @@
 // ctx :
 //   appeler(cmd, args)       une commande Rust ; l'erreur s'affiche en toast puis se relance
 //   lien(url), image(cle)    ouvrir une adresse ; l'url d'une image du cache (`icone:<appId>`, `avatar:<compte>`)
+//   fichier(chemin)          l'url d'un fichier du cache rendu par une commande (une vidéo de la Veille)
 //   aller(ecran)             changer d'écran
 //   montrer(genre, id)       ouvrir l'écran qui montre une vidéo, une app ou une tâche, sur elle (comme la palette)
 //   business                 l'id du business choisi, null pour « Tous »
@@ -20,7 +21,7 @@
 //   page.sousTitre(texte), page.outils(...noeuds)   l'en-tête de la page
 //   abonner(fn) -> arrêt     fn(ctx) remplace le re-rendu complet tant que l'écran est affiché
 
-import { appeler, ecouter, lien, image, fenetre, toast } from "./pont.js";
+import { appeler, ecouter, lien, image, fichier, fenetre, toast } from "./pont.js";
 import { h, remplacer, icone, marque, avatar, point, surtitre, segmente, glisseur, entree, rendu, sobre, jeton, nombreJeton } from "./composants.js";
 import * as F from "./format.js";
 import { ouvrirPalette } from "./palette.js";
@@ -217,6 +218,7 @@ function contexte(rafraichi) {
     appeler,
     lien,
     image: (cle) => image(f.miniatures, cle),
+    fichier,
     aller,
     montrer: (genre, id) => montrerTrouve({ genre, id }),
     business: etat.business,

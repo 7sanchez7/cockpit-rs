@@ -1,5 +1,5 @@
 //! Veille : les vidéos qui montent sur les mots-clés suivis, triées et filtrées, et le détail de la vidéo choisie
-//! avec l'analyse de Claude (docs/ecrans.md § Veille).
+//! avec l'analyse de Claude, et le lecteur (docs/ecrans.md § Veille).
 use crate::commandes::{texte, Rep};
 use crate::ecrans::lectures;
 use crate::Etat;
@@ -8,7 +8,8 @@ use noyau::jour::Date;
 use noyau::lecture::format;
 use noyau::modeles::Plateforme;
 use noyau::modeles_veille::{AnalyseVeille, MotVeille, VideoVeille};
-use noyau::sources::veille::PLATEFORMES;
+use noyau::p;
+use noyau::sources::veille::{analyse, PLATEFORMES};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -64,7 +65,14 @@ pub struct CaseVeille {
     badge: Option<String>,
     outlier: bool,
     legende: String,
-    aide: String,
+    /// Les chiffres connus de la vidéo, sur la miniature au survol.
+    stats: Vec<Stat>,
+}
+
+#[derive(Serialize)]
+pub struct Stat {
+    nom: &'static str,
+    valeur: String,
 }
 
 #[derive(Serialize)]
@@ -172,6 +180,17 @@ pub async fn retirer_mot(etat: State<'_, Etat>, business: String, mot: String) -
     Ok(())
 }
 
+/// Le fichier de la vidéo, téléchargé à la demande dans le cache (`analyse::fichier`), pour le lecteur de l'écran ;
+/// la seule commande de la Veille qui parle au réseau.
+#[tauri::command]
+pub async fn lire_video(etat: State<'_, Etat>, id: String) -> Rep<String> {
+    let v = etat.store.videos_veille("where v.id = ?", p![id]).map_err(texte)?.into_iter().next()
+        .ok_or("vidéo absente de la veille")?;
+    let http = etat.collecteur.contexte().map_err(texte)?.http;
+    let f = analyse::fichier(&v, &http).await.map_err(texte)?;
+    Ok(f.to_string_lossy().into_owned())
+}
+
 /// « 3 mots, 42 vidéos dont 9 outliers en 30 j, cherché il y a 2 h ».
 fn sous_titre(mots: &[MotVeille], toutes: &[VideoVeille], m: &Date) -> String {
     if mots.is_empty() {
@@ -230,8 +249,24 @@ fn case(v: &VideoVeille, tri: Tri, m: &Date) -> CaseVeille {
         badge: badge(v, tri, m),
         outlier: v.outlier(),
         legende: format!("@{}{}", v.compte, if v.analyse.is_some() { " ✦" } else { "" }),
-        aide: v.legende.clone().unwrap_or_else(|| v.url.clone()),
+        stats: stats(v, m),
     }
+}
+
+/// Publiée, vues, likes, commentaires, partages, enregistrements, × médiane, vues/h, durée : ceux qui sont connus.
+fn stats(v: &VideoVeille, m: &Date) -> Vec<Stat> {
+    let compte = |n: Option<i64>| n.map(|n| format::compact(n as f64));
+    [
+        ("Publiée", v.publiee.map(|d| format::il_ya(&d, m))),
+        ("Vues", v.vues.map(|n| format::entier(n as f64))),
+        ("Likes", compte(v.likes)),
+        ("Commentaires", compte(v.commentaires)),
+        ("Partages", compte(v.partages)),
+        ("Enregistrements", compte(v.enregistrements)),
+        ("× médiane", v.ratio().map(|r| format!("{}×", format::decimal(r, 1)))),
+        ("Vues/h", v.vitesse.map(format::compact)),
+        ("Durée", v.duree_s.map(format::duree)),
+    ].into_iter().filter_map(|(nom, valeur)| Some(Stat { nom, valeur: valeur? })).collect()
 }
 
 fn detail(v: &VideoVeille, m: &Date) -> DetailVeille {
@@ -256,7 +291,7 @@ fn detail(v: &VideoVeille, m: &Date) -> DetailVeille {
             LigneMesure { nom: "Abonnés", valeur: v.abonnes.map(|n| format::compact(n as f64)), succes: false },
         ],
         analyse: v.analyse.as_ref().map(analyse),
-        attente: if v.outlier() { "Analyse au prochain passage (clé Anthropic du business)." } else { "Analysée seulement si outlier." },
+        attente: if v.a_analyser() { "Analyse au prochain passage (clé Anthropic du business)." } else { "Analysée à partir de 2× la médiane du compte." },
     }
 }
 

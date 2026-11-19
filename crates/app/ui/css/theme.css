@@ -38,6 +38,7 @@
   --blanc-halo: rgb(255 255 255 / .16);
   --noir-ombre: rgb(0 0 0 / .35);
   --voile: rgb(0 0 0 / .55);
+  --voile-stats: rgb(0 0 0 / .8);
 
   /* dégradés */
   --lueur: radial-gradient(50% 50% at 50% 50%, rgb(255 255 255 / .075) 0%, rgb(255 255 255 / .02) 50%, transparent 100%);

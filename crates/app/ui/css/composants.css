@@ -912,6 +912,22 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 }
 .case-video .logo-coin img.logo { width: var(--t-logo-mini); height: var(--t-logo-mini); }
 .case-video .badge { position: absolute; top: var(--e-s); left: var(--e-s); background: var(--voile); font: var(--f-tag); }
+/* les chiffres de la vidéo, au survol de la miniature */
+.case-video .stats {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--e-xs);
+  padding: var(--e-m);
+  background: var(--voile-stats);
+  opacity: 0;
+  transition: opacity var(--duree-fondu);
+}
+.case-video:hover .stats { opacity: 1; }
+.case-video .stat { display: flex; justify-content: space-between; gap: var(--e-s); font: var(--f-mini); color: var(--secondaire); }
+.case-video .stat .valeur { font: var(--f-mini-gras); color: var(--texte); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .case-video .legende {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -1017,6 +1033,32 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 .detail-veille { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--e-xl); overflow-y: auto; scrollbar-width: none; }
 .detail-veille::-webkit-scrollbar { display: none; }
 .entete-veille { display: flex; gap: var(--e-xl); }
+.apercu-lecture { position: relative; flex: none; align-self: flex-start; display: flex; }
+.apercu-lecture .lecture {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: var(--f-symbole-grand);
+  color: var(--texte);
+  background: var(--voile);
+  border-radius: var(--r-avatar);
+}
+/* le lecteur de la Veille, par-dessus l'écran */
+.voile.lecteur { align-items: stretch; padding: var(--e-page); }
+.lecteur .cadre {
+  aspect-ratio: 9 / 16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--r-panneau);
+  background: var(--noir);
+  font: var(--f-petit);
+  color: var(--secondaire);
+}
+.lecteur video { width: 100%; height: 100%; object-fit: contain; background: var(--noir); }
 .entete-veille .infos { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--e-s); }
 .entete-veille .compte { display: flex; align-items: center; gap: var(--e-s); font: var(--f-corps-gras); color: var(--texte); }
 .entete-veille .note { font: var(--f-mini); color: var(--secondaire); }

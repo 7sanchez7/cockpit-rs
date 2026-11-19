@@ -1,5 +1,6 @@
 // Veille : les vidéos qui montent sur les mots-clés suivis. La page ne défile pas, ses colonnes défilent.
-// Tout se lit par la commande `veille` (src/ecrans/veille.rs) ; ce module n'affiche que ce qu'elle rend.
+// Tout se lit par la commande `veille` (src/ecrans/veille.rs) ; ce module n'affiche que ce qu'elle rend. Le lecteur
+// demande le fichier de la vidéo à `lire_video`, qui le télécharge dans le cache au premier clic.
 
 import { bloc, enTetePanneau, h, icone, logoPlateforme, miniature, pastille, pilule, rangee, rendu, segmente, surtitre, vide } from "../composants.js";
 import { bouton, caseVideo, choixBusiness, menuContextuel, popover, remplacer } from "./videos/commun.js";
@@ -82,6 +83,34 @@ function rangeeMots(d, ctx) {
   return h("div", { class: "rangee-mots" }, d.mots.map((m) => piluleMot(m, ctx)), ajout);
 }
 
+// lecteur
+
+/** La vidéo par-dessus l'écran ; Échap ou un clic sur le voile la ferme. */
+async function lire(v, ctx) {
+  const cadre = h("div", { class: "cadre" }, h("span", { class: "passage tourne" }, icone("relancer"), "Téléchargement"));
+  const voile = h("div", { class: "voile lecteur", onmousedown: (e) => e.target === voile && fermer() }, cadre);
+  const echap = (e) => {
+    if (e.key !== "Escape") return;
+    e.stopPropagation();
+    fermer();
+  };
+  function fermer() {
+    voile.remove();
+    document.removeEventListener("keydown", echap, true);
+  }
+  document.addEventListener("keydown", echap, true);
+  document.body.append(voile);
+  let chemin;
+  try {
+    chemin = await ctx.appeler("lire_video", { id: v.id });
+  } catch {
+    // l'erreur est déjà en toast
+    fermer();
+    return;
+  }
+  if (voile.isConnected) cadre.replaceChildren(h("video", { src: ctx.fichier(chemin), controls: true, autoplay: true }));
+}
+
 // vidéos
 
 function panneauVeille(d, ctx) {
@@ -111,23 +140,25 @@ function panneauVeille(d, ctx) {
           h(
             "div",
             { class: "grille-videos" },
-            d.videos.map((v) =>
-              menuContextuel(
-                caseVideo({
-                  cles: v.cles,
-                  plateforme: v.plateforme,
-                  vues: v.vues,
-                  badge: v.badge,
-                  badgeCouleur: v.outlier ? "var(--succes)" : "var(--texte)",
-                  legende: v.legende,
-                  lignes: 1,
-                  choisie: v.id === d.choisie,
-                  aide: v.aide,
-                  clic: () => maj({ choisie: v.id }),
-                }),
-                [{ libelle: `Ouvrir sur ${v.nomPlateforme}`, faire: () => ctx.lien(v.url) }],
-              ),
-            ),
+            d.videos.map((v) => {
+              const el = caseVideo({
+                cles: v.cles,
+                plateforme: v.plateforme,
+                vues: v.vues,
+                badge: v.badge,
+                badgeCouleur: v.outlier ? "var(--succes)" : "var(--texte)",
+                legende: v.legende,
+                lignes: 1,
+                choisie: v.id === d.choisie,
+                stats: v.stats,
+                clic: () => maj({ choisie: v.id }),
+              });
+              el.addEventListener("dblclick", () => lire(v, ctx));
+              return menuContextuel(el, [
+                { libelle: "Lire ici", faire: () => lire(v, ctx) },
+                { libelle: `Ouvrir sur ${v.nomPlateforme}`, faire: () => ctx.lien(v.url) },
+              ]);
+            }),
           ),
         ),
   );
@@ -146,7 +177,12 @@ function detail(d, ctx) {
       h(
         "div",
         { class: "entete-veille" },
-        miniature(v.cles, { plateforme: v.plateforme, largeur: "var(--t-apercu-l)", hauteur: "var(--t-apercu-h)", rayon: "var(--r-avatar)" }),
+        h(
+          "button",
+          { class: "apercu-lecture survolable", title: "Lire ici", onclick: () => lire(v, ctx) },
+          miniature(v.cles, { plateforme: v.plateforme, largeur: "var(--t-apercu-l)", hauteur: "var(--t-apercu-h)", rayon: "var(--r-avatar)" }),
+          h("span", { class: "lecture" }, "▶"),
+        ),
         h(
           "div",
           { class: "infos" },

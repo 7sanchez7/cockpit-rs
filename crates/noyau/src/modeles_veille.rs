@@ -136,6 +136,8 @@ impl VideoVeille {
         ScoreVeille::pull(self.vues, self.likes, self.commentaires, self.partages, self.enregistrements)
     }
     pub fn outlier(&self) -> bool { ScoreVeille::outlier(self.ratio(), self.vues, self.pull()) }
+    /// Vaut une analyse de Claude : outlier, ou au moins `RATIO_PERCEE` fois la médiane de son compte.
+    pub fn a_analyser(&self) -> bool { self.outlier() || self.ratio().is_some_and(|r| r >= ScoreVeille::RATIO_PERCEE) }
 }
 
 /// Ce que Claude a vu d'une vidéo de veille (JSON dans `veille_analyse`, mêmes clés que la version macOS).
