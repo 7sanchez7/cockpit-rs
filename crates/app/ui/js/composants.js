@@ -529,3 +529,20 @@ export function caseRonde({ faite = false, alerte = false, quandClic }) {
     faite && "✓",
   );
 }
+
+// Réglages
+
+/** Un interrupteur : quandChange(oui) à chaque bascule ; l'état affiché suit le clic. */
+export function interrupteur(actif, quandChange) {
+  const el = h("button", {
+    class: "interrupteur",
+    role: "switch",
+    "aria-checked": String(actif),
+    onclick: () => {
+      const oui = el.getAttribute("aria-checked") !== "true";
+      el.setAttribute("aria-checked", String(oui));
+      quandChange(oui);
+    },
+  });
+  return el;
+}

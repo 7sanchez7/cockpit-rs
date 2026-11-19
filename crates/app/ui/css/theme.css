@@ -198,6 +198,13 @@
   --glisse: 14px;
   --flou: 8px;
   --reduit: .98;
+
+  /* Réglages et barre de menus */
+  --t-barre-menus: 340px;
+  --t-champ-reglage: 280px;
+  --t-interrupteur-l: 38px;
+  --t-interrupteur-h: 22px;
+  --t-bouton-reglage: 28px;
 }
 
 @media (prefers-reduced-motion: reduce) {
