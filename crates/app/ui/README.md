@@ -50,13 +50,14 @@ Le contexte :
 | `appeler(cmd, args)` | une commande Rust ; l'erreur s'affiche en toast puis se relance |
 | `lien(url)`, `image(cle)` | ouvrir une adresse ; l'url d'une image du cache (`icone:<appId>`) |
 | `aller(id)` | changer d'écran |
+| `montrer(genre, id)` | ouvrir l'écran qui montre ce résultat, sur lui (`video`, `app`, `tache`), comme la palette |
 | `business`, `businesses` | l'id choisi (null pour « Tous ») ; `[{ id, nom, lettre, teinte, appStoreId }]` |
 | `sources`, `enCours`, `pause` | `[{ id, nom, passage }]`, les ids en cours, la collecte en pause |
 | `plateforme` | `macos`, `windows`, `linux` |
 | `version`, `maintenant`, `rafraichi` | la version de la base, l'heure du rendu, faux au premier rendu |
 | `page.sousTitre(t)`, `page.outils(...n)` | l'en-tête |
 | `abonner(fn) -> arrêt` | voir plus haut |
-| `choix` | `{ genre, id }` quand la palette ouvre l'écran sur un résultat (`video`, `app`, `tache`), null sinon ; valable pour ce seul rendu |
+| `choix` | `{ genre, id }` quand la palette ou `montrer` ouvre l'écran sur un résultat (`video`, `app`, `tache`), null sinon ; valable pour ce seul rendu |
 
 ## Appeler Rust
 

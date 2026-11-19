@@ -20,7 +20,7 @@ Au centre :
 - **Score** (`score()`, `radar.js`) : les sept jours complets jusqu'à hier contre les sept d'avant, sur cinq axes notés sur 100 ; un axe sans semaine d'avant reste au centre du radar, son nom grisé. Dessous, la moyenne sur 100 et le point faible.
 - **Actifs par heure** (Aujourd'hui) contre le même jour la semaine dernière, ou **Actifs par jour** contre la période d'avant (`actifs()`).
 - **En direct** : le fil de la période, 40 au plus.
-- **Vidéos** (`videos()`) : Aujourd'hui, celles qui ont pris des vues sur 24 h ; sur N jours, celles publiées dans la période (8 au plus). Un clic ouvre l'écran Vidéos.
+- **Vidéos** (`videos()`) : Aujourd'hui, celles qui ont pris des vues sur 24 h ; sur N jours, celles publiées dans la période (8 au plus). Un clic ouvre l'écran Vidéos sur cette vidéo (`ctx.montrer`).
 
 **Plan**, à droite (`panneauPlan`, lecture `plan()`) : la date du jour, puis la note « Cockpit » de Notes section par section, avec « cases faites / cases » ; une case cochée est barrée, une ligne sans case a une puce. Sans note, le panneau dit pourquoi (l'erreur du dernier passage de la source `notes`) ou comment l'écrire. « Ouvrir Notes » appelle `ouvrir_notes`. Dessous, **À traiter** : les 5 premières tâches ouvertes, cochées par `cocher_tache(id, fait)` ; « Voir les N » ouvre l'écran À traiter. Replié : le nombre de cases à faire et celui des tâches.
 

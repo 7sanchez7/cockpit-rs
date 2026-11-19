@@ -124,7 +124,7 @@ function videos(ctx, v) {
           v.lignes.map((l, i) =>
             h(
               "button",
-              { class: "rang", title: l.aide, onclick: () => ctx.aller("videos") },
+              { class: "rang", title: l.aide, onclick: () => ctx.montrer("video", l.id) },
               h("span", null, i + 1),
               h("span", { class: "titre" }, l.titre),
               h("span", null, l.age),

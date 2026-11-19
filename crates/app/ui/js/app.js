@@ -9,6 +9,7 @@
 //   appeler(cmd, args)       une commande Rust ; l'erreur s'affiche en toast puis se relance
 //   lien(url), image(cle)    ouvrir une adresse ; l'url d'une image du cache (`icone:<appId>`, `avatar:<compte>`)
 //   aller(ecran)             changer d'écran
+//   montrer(genre, id)       ouvrir l'écran qui montre une vidéo, une app ou une tâche, sur elle (comme la palette)
 //   business                 l'id du business choisi, null pour « Tous »
 //   businesses               [{ id, nom, lettre, teinte, appStoreId }]
 //   sources, enCours, pause  les sources et leur dernier passage, les ids en cours, la collecte en pause
@@ -217,6 +218,7 @@ function contexte(rafraichi) {
     lien,
     image: (cle) => image(f.miniatures, cle),
     aller,
+    montrer: (genre, id) => montrerTrouve({ genre, id }),
     business: etat.business,
     businesses: f.businesses,
     sources: f.sources,
