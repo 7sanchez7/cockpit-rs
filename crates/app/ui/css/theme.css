@@ -253,3 +253,26 @@
 :root {
   --t-colonne-pays: 96px;
 }
+
+/* Accueil / Data : les mesures propres aux deux écrans, sans jeton commun en Swift */
+:root {
+  --en-pause: .6;
+  --t-objectif-jauge: 10px;
+  --t-ligne-table: 24px;
+  --t-table-cohortes: 420px;
+  --t-etape-barre: 8px;
+  --t-etape-nom: 130px;
+  --t-etape-nombre: 36px;
+  --t-etape-pourcent: 40px;
+  --t-etape-perte: 44px;
+  --t-arbre-barre: 6px;
+  --t-arbre-installs: 58px;
+  --t-arbre-taux: 86px;
+  --t-arbre-court: 48px;
+  --t-arbre-ecarter: 28px;
+  --colonnes-dimensions: 8;
+  --t-heros-axe: 52px;
+  --i-objectif: -0.6px;
+  --t-coche-plan: 13px;
+  --e-tete-decoupe: 6px;
+}

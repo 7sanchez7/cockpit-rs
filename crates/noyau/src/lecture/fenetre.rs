@@ -2,10 +2,10 @@
 use super::{format, Lectures};
 use crate::erreur::Res;
 use crate::jour::{self, Date};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// La journée en cours, ou des jours complets jusqu'à hier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Periode { Jour, Semaine, Mois, Trimestre }
 

@@ -92,5 +92,10 @@ pub fn commandes() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
         veille::ajouter_mot,
         veille::activer_mot,
         veille::retirer_mot,
+        accueil::accueil,
+        accueil::cocher_tache,
+        accueil::ouvrir_notes,
+        data::data,
+        data::arbre,
     ]
 }
