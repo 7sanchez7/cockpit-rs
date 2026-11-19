@@ -2,6 +2,7 @@
 use crate::hote::{Pages, AGENT};
 use crate::Etat;
 use noyau::collecte::collecteur::REGLAGE_PAUSE;
+use noyau::modeles::Passage;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -23,6 +24,30 @@ pub struct EtatFenetre {
     pause: bool,
     reglages: BTreeMap<String, String>,
     plateforme: &'static str,
+    businesses: Vec<BusinessFenetre>,
+    sources: Vec<SourceFenetre>,
+    a_traiter: usize,
+    /// Le dossier des images du cache : l'interface y lit `<clé>` avec `:` et `/` changés en `_`.
+    miniatures: String,
+}
+
+/// Un business tel que la barre du haut le montre.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessFenetre {
+    id: String,
+    nom: String,
+    lettre: String,
+    teinte: String,
+    app_store_id: Option<String>,
+}
+
+/// Une source et son dernier passage, pour les points de la barre du haut.
+#[derive(Serialize)]
+pub struct SourceFenetre {
+    id: &'static str,
+    nom: &'static str,
+    passage: Option<Passage>,
 }
 
 /// Le canal du navigateur caché (`plugin:veille|message`), ouvert aux pages distantes par capabilities/veille.json.
@@ -39,12 +64,23 @@ pub async fn etat(etat: State<'_, Etat>) -> Rep<EtatFenetre> {
     }
     let mut en_cours: Vec<String> = etat.collecteur.en_cours().into_iter().collect();
     en_cours.sort();
+    let businesses = etat.store.businesses().map_err(texte)?.into_iter()
+        .map(|b| BusinessFenetre { id: b.id, nom: b.nom, lettre: b.lettre, teinte: b.teinte, app_store_id: b.config.app_store_id })
+        .collect();
+    let mut sources = Vec::new();
+    for s in &etat.collecteur.sources {
+        sources.push(SourceFenetre { id: s.id(), nom: s.nom(), passage: etat.store.dernier_passage(s.id()).map_err(texte)? });
+    }
     Ok(EtatFenetre {
         version: etat.store.version(),
         en_cours,
         pause: etat.store.reglage(REGLAGE_PAUSE).map_err(texte)?.as_deref() == Some("1"),
         reglages,
         plateforme: std::env::consts::OS,
+        businesses,
+        sources,
+        a_traiter: crate::ecrans::resume_tray(&etat.store).a_traiter,
+        miniatures: noyau::collecte::miniatures::dossier().to_string_lossy().into_owned(),
     })
 }
 
