@@ -69,6 +69,12 @@ export function s(tag, attrs, ...enfants) {
   return remplir(document.createElementNS(SVG, tag), attrs, enfants);
 }
 
+// replaceChildren qui accepte, comme h, des tableaux et des valeurs nulles ou false
+export function remplacer(el, ...enfants) {
+  el.replaceChildren();
+  return remplir(el, null, enfants);
+}
+
 // animations
 
 export function entree(el, rang = 0) {
@@ -413,7 +419,8 @@ export function courbe({ series, etiquettes = [], format = F.compact, hauteur })
       vises[k].style.left = x + "%";
       vises[k].style.top = (v == null ? 0 : y(v)) + "%";
     });
-    bulle.replaceChildren(
+    remplacer(
+      bulle,
       etiquettes[i] != null && h("b", null, etiquettes[i]),
       series.map((serie) => h("div", { class: "ligne" }, h("span", { class: "point mini", style: { "--c": serie.couleur ?? "var(--texte)" } }), serie.nom, " ", h("b", null, serie.valeurs[i] == null ? F.vide : format(serie.valeurs[i])))),
     );

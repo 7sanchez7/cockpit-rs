@@ -12,6 +12,8 @@
 
 ## Barre de menus et barre des tâches
 
+Sur Mac, la barre des menus de l'app est en français (`menu` dans `src/main.rs`) : Cockpit (À propos, Masquer, Quitter), Édition (Annuler, Couper, Copier, Coller, Tout sélectionner, que les champs de texte de la WebView utilisent par ⌘X, ⌘C, ⌘V), Fenêtre. Windows n'a pas de menu.
+
 `ui/barre.html` et `ui/js/barre.js`, commandes dans `src/ecrans/barre.rs`. Le clic gauche sur l'icône (`tray.rs`) ouvre ou referme la fenêtre `barre` (sans bord, toujours devant, hors de la barre des tâches), centrée sur l'icône : dessous si l'icône est en haut de l'écran (barre de menus du Mac), dessus si elle est en bas (barre des tâches de Windows), sans déborder de la zone utile. Elle se cache dès qu'elle perd le focus ; un clic sur l'icône dans les 300 ms qui suivent ne la rouvre pas. Le clic droit garde le menu de l'icône.
 
 Le contenu suit `BarreMenus.swift` : l'heure du dernier passage, 4 chiffres du jour (MRR brut en euros, Actifs, Installs, Essais), « SAV » avec le nombre de tâches ouvertes (ambre s'il y en a) qui ouvre l'écran SAV, les 5 derniers événements du fil, puis Ouvrir, Actualiser et Quitter. La lecture (`barre`) suit le business choisi dans la fenêtre principale (réglage `business`, Tous s'il est vide). La page se relit au focus, à chaque événement `cockpit` et toutes les 30 s, se mesure et donne sa hauteur (`barre_taille`). Entrée ouvre le cockpit, Échap cache la fenêtre (`barre_ouvrir`, `barre_cacher`, `quitter`).

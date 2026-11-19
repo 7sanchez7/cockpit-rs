@@ -20,7 +20,7 @@
 //   abonner(fn) -> arrêt     fn(ctx) remplace le re-rendu complet tant que l'écran est affiché
 
 import { appeler, ecouter, lien, image, fenetre, toast } from "./pont.js";
-import { h, icone, marque, avatar, point, surtitre, segmente, glisseur, entree, rendu, sobre, jeton, nombreJeton } from "./composants.js";
+import { h, remplacer, icone, marque, avatar, point, surtitre, segmente, glisseur, entree, rendu, sobre, jeton, nombreJeton } from "./composants.js";
 import * as F from "./format.js";
 import { ouvrirPalette } from "./palette.js";
 
@@ -93,7 +93,7 @@ function construireBarre() {
   barre.bulle = h("div", { class: "bulle verre" });
   barre.actualiser = h("button", { class: "bouton-capsule verre capsule rond", onclick: () => relancer() }, icone("relancer"));
   const outils = [
-    h("button", { class: "bouton-capsule verre capsule bande-sources", onclick: () => aller("sante") }, barre.points, barre.texteSources, barre.bulle),
+    (barre.sources = h("button", { class: "bouton-capsule verre capsule bande-sources", onclick: () => aller("sante") }, barre.points, barre.texteSources, barre.bulle)),
     h("button", { class: "bouton-capsule verre capsule", title: "Rechercher", onclick: () => palette() }, icone("loupe"), h("span", { class: "tag" }, raccourci("K"))),
     barre.actualiser,
     h("button", { class: "bouton-capsule verre capsule rond", title: `Réglages (${raccourci(",")})`, onclick: () => aller("reglages") }, icone("reglages")),
@@ -143,7 +143,9 @@ function majBarre() {
   const derniere = fins.length ? Math.max(...fins) : null;
   barre.points.replaceChildren(...f.sources.map((s) => point(etatSource(s, enCours).couleur, { mini: true, enCours: enCours.has(s.id) })));
   barre.texteSources.textContent = derniere ? "Collecte " + F.ilYa(derniere, maintenant) : "Aucune collecte";
-  barre.bulle.replaceChildren(
+  barre.sources.setAttribute("aria-label", "Santé des sources, " + barre.texteSources.textContent);
+  remplacer(
+    barre.bulle,
     surtitre("Sources"),
     f.sources.length === 0 && h("div", { class: "derniere" }, "Aucune source branchée."),
     f.sources.map((s) => {

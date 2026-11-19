@@ -35,6 +35,7 @@ fn main() {
     let pages = hote::Pages::default();
     let veille = pages.clone();
     tauri::Builder::default()
+        .menu(menu)
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -84,6 +85,41 @@ fn main() {
                 tray::montrer(_app);
             }
         });
+}
+
+/// La barre des menus du Mac, en français (celle de Tauri est en anglais). Windows n'a pas de menu : la fenêtre
+/// dessine sa propre barre.
+fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, PredefinedMenuItem as P, Submenu};
+    if !cfg!(target_os = "macos") {
+        return Menu::new(app);
+    }
+    let cockpit = Submenu::with_items(app, "Cockpit", true, &[
+        &P::about(app, Some("À propos de Cockpit"), None)?,
+        &P::separator(app)?,
+        &P::hide(app, Some("Masquer Cockpit"))?,
+        &P::hide_others(app, Some("Masquer les autres"))?,
+        &P::show_all(app, Some("Tout afficher"))?,
+        &P::separator(app)?,
+        &P::quit(app, Some("Quitter Cockpit"))?,
+    ])?;
+    let edition = Submenu::with_items(app, "Édition", true, &[
+        &P::undo(app, Some("Annuler"))?,
+        &P::redo(app, Some("Rétablir"))?,
+        &P::separator(app)?,
+        &P::cut(app, Some("Couper"))?,
+        &P::copy(app, Some("Copier"))?,
+        &P::paste(app, Some("Coller"))?,
+        &P::select_all(app, Some("Tout sélectionner"))?,
+    ])?;
+    let fenetre = Submenu::with_items(app, "Fenêtre", true, &[
+        &P::minimize(app, Some("Réduire"))?,
+        &P::maximize(app, Some("Zoom"))?,
+        &P::fullscreen(app, Some("Plein écran"))?,
+        &P::separator(app)?,
+        &P::close_window(app, Some("Fermer la fenêtre"))?,
+    ])?;
+    Menu::with_items(app, &[&cockpit, &edition, &fenetre])
 }
 
 /// Prévient l'interface à chaque écriture de la base et à chaque source qui démarre ou finit ; met le tray à jour.

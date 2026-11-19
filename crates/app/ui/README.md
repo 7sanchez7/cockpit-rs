@@ -64,7 +64,7 @@ Le contexte :
 
 ## Composants
 
-La liste exacte et leurs options sont en tête de `js/composants.js`. Les plus courants : `h(tag, attrs, ...enfants)`, `panneau`, `rangee`, `segmente`, `pilule`, `kpi` et `grilleKpi`, `chiffre`, `sparkline`, `courbe`, `barres`, `avatar`, `miniature`, `ligneFil`, `caseRonde`, `pastille`, `point`, `vide`.
+La liste exacte et leurs options sont en tête de `js/composants.js`. Les plus courants : `h(tag, attrs, ...enfants)`, `remplacer(el, ...enfants)` (le `replaceChildren` natif écrirait les tableaux et les `false` en texte), `panneau`, `rangee`, `segmente`, `pilule`, `kpi` et `grilleKpi`, `chiffre`, `sparkline`, `courbe`, `barres`, `avatar`, `miniature`, `ligneFil`, `caseRonde`, `pastille`, `point`, `vide`.
 
 ## Raccourcis
 
