@@ -36,6 +36,11 @@ pub fn cookies(domaine: &str, requis: &str) -> Res<HashMap<String, String>> {
         .ok_or_else(|| Erreur::NonConfigure(format!("pas de session dans Safari : se connecter sur {domaine} dans Safari")))
 }
 
+/// Où se reconnecter à un site, pour les messages : Safari sur Mac, la fenêtre Sessions de l'app ailleurs.
+pub fn se_connecter(domaine: &str) -> String {
+    if cfg!(target_os = "macos") { format!("se reconnecter sur {domaine} dans Safari") } else { format!("se reconnecter à {domaine} dans Réglages, Sessions") }
+}
+
 fn sans_acces() -> Erreur {
     Erreur::NonConfigure("Safari illisible : donner l'accès complet au disque à Cockpit (Réglages Système, Confidentialité et sécurité)".into())
 }

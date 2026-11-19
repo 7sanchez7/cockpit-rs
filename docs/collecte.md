@@ -31,8 +31,8 @@ Le registre, dans l'ordre de Santé, est `sources::toutes()` (`crates/noyau/src/
 
 Aides partagées, dans `crates/noyau/src/collecte/` :
 
-- `http.rs` : `Http` et `Requete` (ci-dessous), `UA_NAVIGATEUR` (Chrome sur Mac) et `UA_SAFARI`, `entete_cookie` (l'en-tête `Cookie` d'une session, clés triées), `encoder` (une valeur d'URL), `extrait` (le début d'une réponse pour un message d'erreur).
-- `safari.rs` : les cookies d'un domaine dans Safari (§ Sessions).
+- `http.rs` : `Http` et `Requete` (ci-dessous), `UA_NAVIGATEUR` (Chrome sur Mac), `UA_SAFARI` et `UA_SESSION` (le navigateur de la session : Safari sur Mac, Edge WebView2 sous Windows), `entete_cookie` (l'en-tête `Cookie` d'une session, clés triées), `encoder` (une valeur d'URL), `extrait` (le début d'une réponse pour un message d'erreur).
+- `safari.rs` : les cookies d'un domaine dans Safari (§ Sessions), et `se_connecter`, la fin des messages de session expirée : « se reconnecter sur `<site>` dans Safari » sur Mac, « se reconnecter à `<site>` dans Réglages, Sessions » ailleurs (`safari::se_connecter`).
 - `ytdlp.rs` : la liste (`liste`, `yt-dlp --flat-playlist -J`) et le détail (`details`, `yt-dlp -j --skip-download`) des vidéos publiques d'un compte TikTok ou YouTube.
 - `miniatures.rs` : télécharge les images absentes du dossier `miniatures` du cache (§ Où sont les fichiers), un fichier par clé (`:` et `/` remplacés par `_`) : l'id de la vidéo pour sa miniature, `avatar:<compte>`, `icone:<id App Store>`, `premiere:<id de vidéo>` pour la première image du flux. `extraire_premieres` les tire toutes, 4 à la fois (`EXTRACTIONS_EN_PARALLELE`) : `yt-dlp -g` en 960 px de haut au plus, puis `ffmpeg -frames:v 1`, écrit dans un `.part` puis renommé. Seuls YouTube et Facebook en ont (`cles`), leur miniature n'étant pas la première image. L'interface lit ce dossier sans réseau ; le vider fait tout revenir au passage suivant.
 - `jwt.rs` : `es256` (App Store Connect) et `rs256` (Play Console).
@@ -120,12 +120,12 @@ Sous Windows, il essaie les extensions `.exe`, `.cmd` et `.bat`. Le dossier du p
 
 `ctx.secrets.valeur("NOM", business)` (`crates/noyau/src/collecte/secrets.rs`) cherche, dans l'ordre :
 
-1. le cache en mémoire de l'app (une valeur déjà trouvée dans le trousseau ou Secret Manager) ;
-2. la variable d'environnement `NOM` non vide (débogage, `NOM=… cargo run -p noyau --example essai -- <Source>`) ;
+1. la variable d'environnement `NOM` non vide (débogage, `NOM=… cargo run -p noyau --example essai -- <Source>`) ;
+2. le cache en mémoire de l'app (une valeur déjà trouvée dans le trousseau ou Secret Manager) ;
 3. le trousseau du système, service `cockpit`, compte `<business>.<NOM>` (saisi dans Réglages) ;
 4. Secret Manager du `firebaseProject` du business, en REST, s'il en a un (`…/secrets/<NOM>/versions/latest:access`). Un 403 ou 404 rend `NonConfigure`.
 
-Sans aucun des quatre : `NonConfigure` « clé `NOM` absente du Trousseau pour `<business>` ».
+Sans aucun des quatre : `NonConfigure` « clé `NOM` absente du trousseau du système pour `<business>` ».
 
 | Trousseau | Mac | Windows |
 |---|---|---|

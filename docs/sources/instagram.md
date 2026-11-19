@@ -10,7 +10,7 @@ Aucun compte Instagram actif dans les business suivis : `NonConfigure` « aucun 
 
 `ctx.hote.cookies("instagram.com", "sessionid")`, même lecture que pour TikTok ([`tiktok.md`](tiktok.md) § La session) : Safari puis la fenêtre Sessions sur Mac, la fenêtre Sessions seule sous Windows. Tous les cookies partent dans `Cookie`, `csrftoken` aussi dans `X-CSRFToken`. Aucune valeur n'est affichée, écrite ni mise dans une erreur.
 
-En-têtes de chaque appel, ceux de la page web d'Instagram : User-Agent de Safari (`UA_SAFARI`, `crates/noyau/src/collecte/http.rs`), `X-IG-App-ID: 936619743392459` (`APP_WEB`, l'app web d'Instagram, exigée par l'API interne), `X-Requested-With: XMLHttpRequest`, `X-ASBD-ID: 359341`, `Accept: */*`, `Accept-Language: fr-FR,fr;q=0.9`, `Referer` = le profil.
+En-têtes de chaque appel, ceux de la page web d'Instagram : User-Agent du navigateur de la session (`UA_SESSION`, `crates/noyau/src/collecte/http.rs` : Safari sur Mac, Edge WebView2 sous Windows), `X-IG-App-ID: 936619743392459` (`APP_WEB`, l'app web d'Instagram, exigée par l'API interne), `X-Requested-With: XMLHttpRequest`, `X-ASBD-ID: 359341`, `Accept: */*`, `Accept-Language: fr-FR,fr;q=0.9`, `Referer` = le profil.
 
 ## Le profil : `web_profile_info`
 
@@ -39,7 +39,7 @@ Pour chaque compte : profil puis fil. Puis les miniatures et avatars absents du 
 Instagram rend un 401, 403 ou 404, ou une page de connexion à la place du JSON (`require_login`). L'erreur (`refusee`) est un `NonConfigure` :
 
 ```
-session Instagram de Safari refusée (<raison>), se reconnecter sur instagram.com dans Safari
+session Instagram refusée (<raison>), se reconnecter sur instagram.com dans Safari
 ```
 
 La raison dit ce qu'Instagram a renvoyé : `HTTP <code>`, `réponse pas en JSON` ou `require_login`. Sur une page d'erreur marquée `not-logged-in`, elle ajoute la provenance des cookies (`Hote::provenance`) : pour chaque profil Safari lu, son nom court, le nombre de cookies du domaine et les dates du `sessionid` ; dans l'app, le nombre de cookies de la fenêtre Sessions. Jamais une valeur. Le corps de la réponse n'est jamais cité.
@@ -55,5 +55,5 @@ Toute autre erreur HTTP devient `Http(code, "instagram")`, sans le corps.
 
 ## Différences avec la version Swift
 
-- **Windows** : le message cite Safari, et l'en-tête `User-Agent` reste celui de Safari sur Mac, alors que la session vient de la fenêtre Sessions (WebView2).
+- **Windows** : le message renvoie à Réglages, Sessions (`safari::se_connecter`) et le `User-Agent` est celui d'Edge WebView2, le navigateur de la session.
 - **Session** : la fenêtre Sessions de l'app sert de repli sur Mac et de seule source sous Windows ; la provenance cite aussi ses cookies.

@@ -37,7 +37,7 @@ Tous les cookies du domaine partent dans l'en-tête `Cookie` (`http::entete_cook
 GET https://www.tiktok.com/passport/web/account/info/?aid=1988&app_name=tiktok_creator_center&device_platform=web_pc
 ```
 
-`data.username` est le compte de la session (`compte_session`), mis en minuscules. Sans `username`, la session a expiré : `Format` « session TikTok de Safari expirée, se reconnecter sur tiktok.com dans Safari ». Si ce compte n'est pas suivi : pas de stats privées, la source finit en gris avec « stats privées : @monapp connecté dans Safari n'est pas suivi ».
+`data.username` est le compte de la session (`compte_session`), mis en minuscules. Sans `username`, la session a expiré : `Format` « session TikTok expirée, se reconnecter sur tiktok.com dans Safari » (sous Windows : « … à tiktok.com dans Réglages, Sessions »). Si ce compte n'est pas suivi : pas de stats privées, la source finit en gris avec « stats privées : @monapp, le compte de la session, n'est pas suivi ».
 
 ## Les stats d'une vidéo : `insight`
 
@@ -120,7 +120,7 @@ Seul le compte de la session a les stats privées. Les autres ont les compteurs 
 ## Différences avec la version Swift
 
 - **Session** : sur Mac, Safari d'abord, puis la fenêtre Sessions de l'app si Safari n'a rien ; sous Windows, seulement la fenêtre Sessions. Sur Mac, si les deux échouent, c'est l'erreur de Safari qui s'affiche.
-- **Messages** : « session TikTok de Safari expirée » et « connecté dans Safari n'est pas suivi » citent Safari même sous Windows, où la session vient de la fenêtre Sessions.
+- **Messages** : sous Windows, ils renvoient à Réglages, Sessions au lieu de Safari (`safari::se_connecter`).
 - **yt-dlp** : trouvé par `commande::trouver` (PATH, puis une liste de dossiers par système), plus par un zsh de login.
 - **Cookies Chromium** : la lecture des cookies chiffrés `v10`/`v11` n'existe pas ici.
 - Le reste suit la version Swift : mêmes appels, mêmes types, mêmes ids du fil, même calcul des vues du jour.

@@ -1,6 +1,6 @@
 //! Voir docs/sources/tiktok.md.
 use crate::collecte::http::{self, encoder, extrait, UA_NAVIGATEUR};
-use crate::collecte::{miniatures, ytdlp, Contexte, Http, Requete, Source};
+use crate::collecte::{miniatures, safari, ytdlp, Contexte, Http, Requete, Source};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::metrique;
@@ -88,7 +88,7 @@ impl Source for TikTok {
             let cookie = http::entete_cookie(&ctx.hote.cookies("tiktok.com", "sessionid")?);
             let session = compte_session(&cookie, &ctx.http).await?.to_lowercase();
             let Some(c) = comptes.iter().find(|c| c.handle == session) else {
-                sans_studio = Some(format!("stats privées : @{session} connecté dans Safari n'est pas suivi"));
+                sans_studio = Some(format!("stats privées : @{session}, le compte de la session, n'est pas suivi"));
                 return Ok(());
             };
             for v in liste.videos.iter().filter(|v| v.compte == session && a_relever(&v.id)) {
@@ -264,7 +264,7 @@ async fn compte_session(cookie: &str, http: &Http) -> Res<String> {
         .await?;
     match o.get("data").and_then(|d| d.get("username")).and_then(Value::as_str) {
         Some(nom) if !nom.is_empty() => Ok(nom.to_string()),
-        _ => Err(format_err("session TikTok de Safari expirée, se reconnecter sur tiktok.com dans Safari")),
+        _ => Err(format_err(format!("session TikTok expirée, {}", safari::se_connecter("tiktok.com")))),
     }
 }
 

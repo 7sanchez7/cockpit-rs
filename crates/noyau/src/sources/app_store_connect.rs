@@ -160,7 +160,7 @@ fn dossier_cles() -> Res<PathBuf> {
 
 /// La première clé `AuthKey_<KEYID>.p8` du dossier, en PEM ; son KEYID vient du nom du fichier.
 pub fn cle(dossier: &Path) -> Res<(String, String)> {
-    let absente = || Erreur::NonConfigure("aucune clé AuthKey_<KEYID>.p8 dans ~/.appstoreconnect/private_keys".into());
+    let absente = || Erreur::NonConfigure(format!("aucune clé AuthKey_<KEYID>.p8 dans {}", dossier.display()));
     // un dossier absent ou illisible, c'est une clé absente
     let entrees = std::fs::read_dir(dossier).map_err(|_| absente())?;
     let mut noms = Vec::new();

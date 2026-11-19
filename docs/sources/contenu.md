@@ -51,7 +51,7 @@ La source rend le nombre de vidéos plus le nombre de tâches. Une erreur arrêt
 ## Ce qui peut casser
 
 - `contenuDir` absent ou dossier déplacé : source en gris.
-- Une fiche pas en UTF-8 : le passage échoue, sans nommer la fiche (voir plus bas).
+- Une fiche pas en UTF-8 : le passage échoue, « fiche `<chemin>` illisible : … ».
 - Une fiche rangée plus profond, ou un `fait/` renommé : ignorée.
 - Le titre de section `## Verdict` renommé : la tâche reste ouverte.
 - Deux fiches avec le même lien : la dernière dans l'ordre des chemins gagne.
@@ -59,6 +59,5 @@ La source rend le nombre de vidéos plus le nombre de tâches. Une erreur arrêt
 
 ## Différences avec la version Swift
 
-- **Fiche illisible** : `std::fs::read_to_string` rend une erreur d'entrée-sortie sans le chemin du fichier. La version Swift nommait la fiche en échec.
 - **Chemins** : `~` est suivi de `/` ou de `\`, et le lien `file://` d'un chemin Windows est écrit avec des `/`.
 - Le reste suit la version Swift : mêmes fiches lues, même titre, mêmes tâches, mêmes ids.

@@ -26,18 +26,18 @@ impl Secrets {
 
     pub async fn valeur(&self, nom: &str, b: &Business) -> Res<String> {
         let compte = format!("{}.{nom}", b.id);
-        if let Some(v) = self.cache.lock().get(&compte) {
-            return Ok(v.clone());
-        }
         if let Some(v) = std::env::var(nom).ok().filter(|v| !v.is_empty()) {
             return Ok(v);
+        }
+        if let Some(v) = self.cache.lock().get(&compte) {
+            return Ok(v.clone());
         }
         if let Some(v) = trousseau::lire(&compte)? {
             self.cache.lock().insert(compte, v.clone());
             return Ok(v);
         }
         let Some(projet) = b.config.firebase_project.as_deref() else {
-            return Err(Erreur::NonConfigure(format!("clé {nom} absente du Trousseau pour {}", b.nom)));
+            return Err(Erreur::NonConfigure(format!("clé {nom} absente du trousseau du système pour {}", b.nom)));
         };
         let v = self.secret_manager(nom, projet).await?;
         self.cache.lock().insert(compte, v.clone());
@@ -70,7 +70,7 @@ impl Secrets {
         let r = Requete::get(url).jeton(&jeton).entete("x-goog-user-project", projet);
         let reponse = match self.http.objet(&r).await {
             Err(Erreur::Http(404 | 403, _)) => {
-                return Err(Erreur::NonConfigure(format!("clé {nom} absente du Trousseau et de Secret Manager ({projet})")))
+                return Err(Erreur::NonConfigure(format!("clé {nom} absente du trousseau du système et de Secret Manager ({projet})")))
             }
             x => x?,
         };
@@ -108,5 +108,5 @@ pub mod trousseau {
         }
     }
 
-    fn erreur(e: keyring::Error) -> Erreur { Erreur::Commande(format!("Trousseau : {e}")) }
+    fn erreur(e: keyring::Error) -> Erreur { Erreur::Commande(format!("trousseau du système : {e}")) }
 }

@@ -1,7 +1,7 @@
 //! Voir docs/sources/instagram.md.
 use super::tiktok::{comptes_suivis, debut_legende, fusionner, publier, sans_echec};
-use crate::collecte::http::{self, UA_SAFARI};
-use crate::collecte::{miniatures, ytdlp, Contexte, Hote, Http, Requete, Source};
+use crate::collecte::http::{self, UA_SESSION};
+use crate::collecte::{miniatures, safari, ytdlp, Contexte, Hote, Http, Requete, Source};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::modeles::{Compte, Plateforme, Releve, ReleveCompte, Video};
@@ -17,7 +17,7 @@ const APP_WEB: &str = "936619743392459";
 
 /// La session refusée, avec ce qu'Instagram a renvoyé, sans jamais citer le corps.
 fn refusee(raison: &str) -> Erreur {
-    Erreur::NonConfigure(format!("session Instagram de Safari refusée ({raison}), se reconnecter sur instagram.com dans Safari"))
+    Erreur::NonConfigure(format!("session Instagram refusée ({raison}), {}", safari::se_connecter("instagram.com")))
 }
 
 pub struct Profil {
@@ -43,7 +43,7 @@ impl Source for Instagram {
         let csrf = cookies.get("csrftoken").map(String::as_str).unwrap_or("");
         let lire = |chemin: String, c: &Compte| {
             let r = Requete::get(format!("{SITE}{chemin}"))
-                .entete("User-Agent", UA_SAFARI)
+                .entete("User-Agent", UA_SESSION)
                 .entete("Cookie", &cookie)
                 .entete("X-IG-App-ID", APP_WEB)
                 .entete("X-CSRFToken", csrf)

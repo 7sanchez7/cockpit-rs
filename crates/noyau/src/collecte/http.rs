@@ -8,6 +8,11 @@ use std::time::Duration;
 pub const UA_NAVIGATEUR: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 /// Safari, pour les sessions lues dans Safari : un site peut refuser une session qui change de navigateur.
 pub const UA_SAFARI: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Safari/605.1.15";
+/// Le navigateur dont vient la session : Safari sur Mac, WebView2 (Edge) sous Windows.
+#[cfg(target_os = "macos")]
+pub const UA_SESSION: &str = UA_SAFARI;
+#[cfg(not(target_os = "macos"))]
+pub const UA_SESSION: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0";
 
 /// L'en-tête `Cookie` d'une session, quelle que soit sa provenance (Safari ou la fenêtre Sessions).
 pub fn entete_cookie(cookies: &HashMap<String, String>) -> String {

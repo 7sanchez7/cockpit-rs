@@ -1,7 +1,7 @@
 //! Voir docs/sources/facebook.md.
 use super::tiktok::{comptes_suivis, debut_legende, fusionner, publier, sans_echec};
 use crate::collecte::http::{self, UA_NAVIGATEUR};
-use crate::collecte::{miniatures, Contexte, Http, Requete, Source};
+use crate::collecte::{miniatures, safari, Contexte, Http, Requete, Source};
 use crate::erreur::{format_err, Erreur, Res};
 use crate::jour::{self, Date};
 use crate::modeles::{Analyse, Compte, Part, Plateforme, Releve, ReleveCompte, Video};
@@ -123,7 +123,7 @@ async fn page_id(handle: &str, cookie: &str, http: &Http) -> Res<String> {
     let html = page(&format!("https://www.facebook.com/{handle}"), cookie, http).await?;
     texte(r#""delegate_page_id":""#, &html)
         .or_else(|| nombre("asset_id=", &html).map(|n| n.to_string()))
-        .ok_or_else(|| format_err(format!("Page {handle} introuvable, ou session Facebook de Safari expirée")))
+        .ok_or_else(|| format_err(format!("Page {handle} introuvable, ou session Facebook expirée")))
 }
 
 /// La requête du tableau Contenu : les publications des 90 derniers jours et leurs statistiques.
@@ -170,7 +170,7 @@ pub fn jetons(html: &str) -> Res<Jetons> {
     let rev = nombre(r#""server_revision":"#, html).or_else(|| nombre(r#""__spin_r":"#, html));
     match (dtsg, lsd, rev) {
         (Some(dtsg), Some(lsd), Some(rev)) => Ok(Jetons { dtsg, lsd, rev: rev.to_string() }),
-        _ => Err(Erreur::NonConfigure("session Facebook de Safari expirée, se reconnecter sur business.facebook.com dans Safari".into())),
+        _ => Err(Erreur::NonConfigure(format!("session Facebook expirée, {}", safari::se_connecter("business.facebook.com")))),
     }
 }
 

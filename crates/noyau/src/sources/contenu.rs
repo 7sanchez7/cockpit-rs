@@ -82,7 +82,8 @@ pub fn lire(racine: &Path) -> Res<Vec<Fiche>> {
             continue;
         }
         let chemin = parties.iter().fold(racine.to_path_buf(), |c, p| c.join(p));
-        let mut f = fiche(&std::fs::read_to_string(&chemin)?);
+        let texte = std::fs::read_to_string(&chemin).map_err(|e| Erreur::Commande(format!("fiche {} illisible : {e}", chemin.display())))?;
+        let mut f = fiche(&texte);
         let creation = std::fs::metadata(&chemin)?.created().ok().map(Date::from);
         f.chemin = chemin.to_string_lossy().into_owned();
         f.dossier = parties[1].clone();

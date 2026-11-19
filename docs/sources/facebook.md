@@ -10,13 +10,13 @@ Aucune Page active dans les business suivis : `NonConfigure` « aucune Page Face
 
 `ctx.hote.cookies("facebook.com", "c_user")`, même lecture que pour TikTok ([`tiktok.md`](tiktok.md) § La session). Sans `c_user` : `NonConfigure`, la source passe en gris. `c_user` est l'id de l'utilisateur, envoyé en `av` et `__user`.
 
-Puis la page `https://business.facebook.com/latest/home?asset_id=<page>`, ouverte comme par le navigateur (`page` : `UA_NAVIGATEUR`, en-têtes `Sec-Fetch-*` d'une navigation), d'où l'on lit trois jetons (`jetons`) : `fb_dtsg` (`DTSGInitialData`, sinon `dtsg.token`), `lsd` (`LSD`) et `__rev` (`server_revision`, sinon `__spin_r`). Sans eux, la session a expiré : `NonConfigure` « session Facebook de Safari expirée, se reconnecter sur business.facebook.com dans Safari ».
+Puis la page `https://business.facebook.com/latest/home?asset_id=<page>`, ouverte comme par le navigateur (`page` : `UA_NAVIGATEUR`, en-têtes `Sec-Fetch-*` d'une navigation), d'où l'on lit trois jetons (`jetons`) : `fb_dtsg` (`DTSGInitialData`, sinon `dtsg.token`), `lsd` (`LSD`) et `__rev` (`server_revision`, sinon `__spin_r`). Sans eux, la session a expiré : `NonConfigure` « session Facebook expirée, se reconnecter sur business.facebook.com dans Safari » (sous Windows : « … à business.facebook.com dans Réglages, Sessions »).
 
 Les cookies, les jetons et le HTML de Business Suite ne sont jamais affichés, écrits ni mis dans une erreur : `appel` remplace le corps d'une erreur HTTP par `facebook`.
 
 ## La Page
 
-Un handle tout en chiffres est l'id de la Page (`page_id`). Sinon, la page publique `https://www.facebook.com/<handle>` donne `delegate_page_id` (ou un `asset_id=`). Ni l'un ni l'autre : `Format` « Page monapp introuvable, ou session Facebook de Safari expirée ». La page d'accueil de Business Suite donne les abonnés : `page_total_likes_or_followers.count`, un `compte_releve`.
+Un handle tout en chiffres est l'id de la Page (`page_id`). Sinon, la page publique `https://www.facebook.com/<handle>` donne `delegate_page_id` (ou un `asset_id=`). Ni l'un ni l'autre : `Format` « Page monapp introuvable, ou session Facebook expirée ». La page d'accueil de Business Suite donne les abonnés : `page_total_likes_or_followers.count`, un `compte_releve`.
 
 ## Le tableau Contenu
 
@@ -57,6 +57,6 @@ Une Page en échec n'arrête pas les autres. Le passage finit en erreur après a
 
 ## Différences avec la version Swift
 
-- **Messages** : « session Facebook de Safari expirée » cite Safari même sous Windows, où la session vient de la fenêtre Sessions.
+- **Messages** : sous Windows, ils renvoient à Réglages, Sessions au lieu de Safari (`safari::se_connecter`).
 - **Session** : Safari puis la fenêtre Sessions de l'app sur Mac, la fenêtre Sessions seule sous Windows ([`../collecte.md`](../collecte.md) § Sessions).
 - **Programmes** : `yt-dlp` et `ffmpeg`, pour la première image, sont trouvés par `commande::trouver`, plus par un zsh de login.

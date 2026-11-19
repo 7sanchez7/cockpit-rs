@@ -117,5 +117,5 @@ La clé est lue une fois par passage. Puis, pour chaque business : le jeton, `cu
 ## Différences avec la version Swift
 
 - **Signature** : `jsonwebtoken` (`crates/noyau/src/collecte/jwt.rs`) au lieu de CryptoKit. La clé est validée comme clé EC en PEM à la lecture.
-- **Windows** : le dossier des clés est sous `%USERPROFILE%`, mais le message `NonConfigure` cite toujours `~/.appstoreconnect/private_keys`.
+- **Windows** : le dossier des clés est sous `%USERPROFILE%` ; le message `NonConfigure` cite le dossier réel de la machine.
 - **Config** : `ascIssuer` et `ascVendor` viennent de la config du business, semée par la graine ([`../collecte.md`](../collecte.md) § Graine) ; il n'y a pas encore d'écran Réglages pour les saisir.
