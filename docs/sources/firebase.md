@@ -33,9 +33,10 @@ m.<minute>.<fournisseur>.n    requêtes HTTP, reprises comprises
 m.<minute>.tk                 tokens facturables
 m.<minute>.f                  appels qui ont échoué jusqu'à l'user
 m.<minute>.v.<moteur>         caractères de voix synthétisés, par moteur
+m.<minute>.s                  ms d'audio transcrites par la dictée Inworld
 ```
 
-`Charge::depuis` somme les minutes de `m` : une clé dont la valeur est une carte est un fournisseur (pas de liste fermée), sauf `v`, la carte des caractères de voix ; `tk` et `f` sont des compteurs ; le reste est ignoré. Un `m` qui n'est pas une carte, une minute qui n'en est pas une ou un compteur non numérique lèvent `Format`. Un document absent est une heure sans appel : `Charge::default()`. Seul le champ `m` est demandé.
+`Charge::depuis` somme les minutes de `m` : une clé dont la valeur est une carte est un fournisseur (pas de liste fermée), sauf `v`, la carte des caractères de voix ; `tk`, `f` et `s` (`dictee_ms`) sont des compteurs ; le reste est ignoré. Un `m` qui n'est pas une carte, une minute qui n'en est pas une ou un compteur non numérique lèvent `Format`. Un document absent est une heure sans appel : `Charge::default()`. Seul le champ `m` est demandé.
 
 **Pourquoi pas `aiDays`.** Roleo tient aussi des agrégats par jour UTC ; le jour serait décalé d'une heure ou deux par rapport à Paris. La source lit donc les heures et les range à l'heure de Paris (`jour::cle`, `jour::heure`).
 
@@ -48,7 +49,7 @@ m.<minute>.v.<moteur>         caractères de voix synthétisés, par moteur
 | `tokens_ia` | -1 | somme des `tk` du jour |
 | `echecs_ia` | -1 | somme des `f` |
 | `cout_texte` | -1 | `cout::euros_tokens(tokens_ia)` |
-| `cout_voix` | -1 | `cout::euros_voix` sur la somme des `v` ; pas écrit un jour sans `v` (la valeur déjà en base reste) |
+| `cout_voix` | -1 | `cout::euros_voix` sur la somme des `v`, plus `cout::euros_dictee` sur la somme des `s` ; pas écrit un jour sans `v` ni `s` (la valeur déjà en base reste) |
 | `cout_ia` | -1 | `cout_texte + cout_voix` (`Store::somme`) |
 | `req_ia.<f>`, `q429_ia.<f>`, `err_ia.<f>` | -1, 0 à 23 | somme de `n`, `q`, `e` ; pour chaque fournisseur vu ce jour-là, 0 aux heures sans appel |
 | `ms_ia.<f>` | -1, 0 à 23 | somme de `ms` / somme de `n`, seulement si `n` > 0 |
@@ -94,7 +95,7 @@ Messages et retours partent dans **un seul** `Store::synchroniser_taches("fireba
 
 Le dashboard est `https://<projet>.web.app` (`dashboard`). Il n'a pas de lien vers un fil précis : les liens mènent à la page.
 
-Tout le passage d'un business (charges, messages, SAV) est écrit dans un seul `store.lot`.
+Un passage écrit deux `store.lot`, le SAV d'abord : les fils ouverts, les retours `new` et `lire_sav` sont lus, puis messages, retours et SAV partent dans un lot ; ensuite `aiLoad` est lu et les charges partent dans un second. Une charge illisible (un moteur de voix sans prix) fait lever le passage sans figer le SAV. Avant le 24 nov. 2026, tout tenait dans un seul lot : du 22 au 24 nov., le moteur `inworld` sans prix a bloqué le SAV, et les messages des fils qui avaient bougé étaient relus à chaque passage, puisque `fils_lus` ne bougeait plus.
 
 ## SAV
 
@@ -125,7 +126,7 @@ Trois fonctions écrivent chez le service, par `Firestore::commit` (`documents:c
 
 Après Firestore, la même chose dans la base (`Store::repondre_sav`, `fermer_fil_sav`, `traiter_retour_sav`).
 
-**Pas encore branché** : aucune commande Tauri n'appelle ces trois fonctions, et l'écran SAV de l'app n'est pas codé. Elles sont testées dans le noyau, rien d'autre.
+Les commandes Tauri `sav_repondre`, `sav_fermer` et `sav_traiter` (`crates/app/src/ecrans/sav.rs`) les appellent depuis l'écran SAV (`aTraiter.js`).
 
 Droits : le compte Google de gcloud doit pouvoir écrire dans Firestore et envoyer par FCM. Un refus remonte en 403.
 
@@ -137,7 +138,7 @@ Firestore compte une lecture par document rendu, et une par requête sans résul
 
 - Pas de compte Google dans gcloud, ou ADC expiré : `non_configure` ou 401. Voir [../runbook.md](../runbook.md).
 - Roleo change la forme d'`aiLoad` : une forme inattendue lève `Format`. Un compteur renommé (`tk`, `n`) passerait en zéros sans erreur : comparer à la page `/ia/` du dashboard.
-- Un moteur de voix sans prix dans `cout::voix_usd` : « moteur de voix sans prix : … », le passage lève.
+- Un moteur de voix sans prix dans `cout::voix_usd` : « moteur de voix sans prix : … », le passage lève après avoir écrit le SAV ; les séries IA restent figées jusqu'au prix.
 - Un filtre de plus (inégalité, tri combiné) demande un index composite : 400 `FAILED_PRECONDITION`.
 - Le dashboard quitte le site Hosting par défaut : changer `dashboard`.
 - Roleo change la forme du support (`supportUnread`, `from`, la notif, `threadLimit`) : changer `sav.rs` en même temps, sinon le cockpit écrirait des fils que l'app lit mal.

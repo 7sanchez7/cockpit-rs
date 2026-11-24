@@ -72,6 +72,15 @@ impl Source for Firebase {
 async fn collecte_business(b: &Business, projet: &str, ctx: &Contexte) -> Res<usize> {
     let f = Firestore { projet: projet.into(), http: ctx.http.clone(), jeton: ctx.gcloud.jeton().await? };
     let maintenant = jour::maintenant();
+    let base = dashboard(projet);
+    // le SAV d'abord, dans son propre lot : une charge IA illisible (un moteur de voix sans prix) ne le fige pas
+    let messages = f.ou("users", "supportOpen", json!({"booleanValue": true}), Some(&sav::CHAMPS_FIL)).await?;
+    let retours = f.ou("feedback", "status", json!({"stringValue": "new"}), None).await?;
+    let releve = sav::lire_sav(&b.id, &f, &messages, &retours, &ctx.store).await?;
+    let lignes_sav = ctx.store.lot(|| {
+        Ok(ecrire_messages(&messages, &retours, &b.id, &base, &maintenant, &ctx.store)?
+            + ctx.store.synchroniser_sav(&b.id, &releve)?)
+    })?;
     let historique = ctx.store.historique_incomplet(&b.id, metrique::COUT_TEXTE, JOURS_HISTORIQUE, &jour::cle(&maintenant))?;
     let heures = heures(if historique { JOURS_HISTORIQUE } else { 2 }, &maintenant);
     let ids: Vec<String> = heures.iter().map(id_heure).collect();
@@ -79,15 +88,7 @@ async fn collecte_business(b: &Business, projet: &str, ctx: &Contexte) -> Res<us
     let charges = heures.iter()
         .map(|h| Ok((*h, charge(docs.get(&id_heure(h)))?)))
         .collect::<Res<Vec<_>>>()?;
-    let messages = f.ou("users", "supportOpen", json!({"booleanValue": true}), Some(&sav::CHAMPS_FIL)).await?;
-    let retours = f.ou("feedback", "status", json!({"stringValue": "new"}), None).await?;
-    let releve = sav::lire_sav(&b.id, &f, &messages, &retours, &ctx.store).await?;
-    let base = dashboard(projet);
-    ctx.store.lot(|| {
-        Ok(ecrire_charges(&charges, &b.id, &format!("{base}/ia/"), &ctx.store)?
-            + ecrire_messages(&messages, &retours, &b.id, &base, &maintenant, &ctx.store)?
-            + ctx.store.synchroniser_sav(&b.id, &releve)?)
-    })
+    Ok(lignes_sav + ctx.store.lot(|| ecrire_charges(&charges, &b.id, &format!("{base}/ia/"), &ctx.store))?)
 }
 
 // charge IA
@@ -138,8 +139,9 @@ pub fn ecrire_charges(heures: &[(Date, Charge)], business: &str, lien: &str, sto
         store.serie(business, metrique::ECHECS_IA, jour, -1, total.echecs as f64)?;
         store.serie(business, metrique::COUT_TEXTE, jour, -1, cout::euros_tokens(total.tokens as f64))?;
         // un jour sans voix garde ce qui est déjà relevé : Roleo ne compte la voix dans aiLoad que depuis le 17 nov. 2026
-        if !total.voix.is_empty() {
-            store.serie(business, metrique::COUT_VOIX, jour, -1, cout::euros_voix(&total.voix)?)?;
+        if !total.voix.is_empty() || total.dictee_ms > 0 {
+            let euros = cout::euros_voix(&total.voix)? + cout::euros_dictee(total.dictee_ms as f64);
+            store.serie(business, metrique::COUT_VOIX, jour, -1, euros)?;
             lignes += 1;
         }
         store.somme(business, metrique::COUT_IA, &[metrique::COUT_TEXTE.into(), metrique::COUT_VOIX.into()], jour)?;
@@ -300,6 +302,8 @@ pub struct Charge {
     pub echecs: i64,
     pub fournisseurs: BTreeMap<String, Compteurs>,
     pub voix: BTreeMap<String, i64>,
+    /// ms d'audio transcrites par la dictée Inworld (`s`).
+    pub dictee_ms: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -323,6 +327,7 @@ impl Charge {
     pub fn ajoute(&mut self, c: &Charge) {
         self.tokens += c.tokens;
         self.echecs += c.echecs;
+        self.dictee_ms += c.dictee_ms;
         for (f, x) in &c.fournisseurs {
             self.fournisseurs.entry(f.clone()).or_default().ajoute(x);
         }
@@ -351,6 +356,8 @@ impl Charge {
                     charge.tokens += compte(Some(v))?;
                 } else if cle == "f" {
                     charge.echecs += compte(Some(v))?;
+                } else if cle == "s" {
+                    charge.dictee_ms += compte(Some(v))?;
                 }
             }
         }
@@ -395,7 +402,7 @@ mod tests {
           "06": {"mapValue": {"fields": {
             "mistral": {"mapValue": {"fields": {"n": {"integerValue": "30"}, "q": {"integerValue": "20"}, "ms": {"integerValue": "15000"}}}},
             "anthropic": {"mapValue": {"fields": {"n": {"integerValue": "4"}, "ms": {"integerValue": "2400"}}}},
-            "tk": {"integerValue": "8000"},
+            "tk": {"integerValue": "8000"}, "s": {"integerValue": "1800000"},
             "v": {"mapValue": {"fields": {"voxtral3": {"integerValue": "500"}, "kokoro": {"doubleValue": 2000}}}}}}}}}}}}
         "#;
 
@@ -410,6 +417,7 @@ mod tests {
         assert_eq!(c.fournisseurs["anthropic"], Compteurs { n: 4, q: 0, e: 0, ms: 2400 });
         assert_eq!(c.fournisseurs.len(), 2);
         assert_eq!(c.voix, voix(&[("voxtral3", 1500), ("kokoro", 2000)]));
+        assert_eq!(c.dictee_ms, 1_800_000);
         assert_eq!(charge(None).unwrap(), Charge::default());
         assert!(charge(Some(&document(r#"{"name": "a/aiLoad/x", "fields": {}}"#).unwrap())).is_err());
         let faux = r#"{"name": "a/aiLoad/x", "fields": {"m": {"mapValue": {"fields": {"05": {"mapValue": {"fields": {"tk": {"stringValue": "1"}}}}}}}}}"#;
@@ -449,7 +457,7 @@ mod tests {
         assert_eq!(valeur(&store, metrique::TOKENS_IA, "2026-11-12", -1), None);
         assert_eq!(v(metrique::ECHECS_IA, -1), Some(1.0));
         assert_eq!(v(metrique::COUT_TEXTE, -1), Some(cout::euros_tokens(20100.0)));
-        let cout_voix = cout::euros_voix(&voix(&[("voxtral3", 1500), ("kokoro", 2000)])).unwrap();
+        let cout_voix = cout::euros_voix(&voix(&[("voxtral3", 1500), ("kokoro", 2000)])).unwrap() + cout::euros_dictee(1_800_000.0);
         assert_eq!(v(metrique::COUT_VOIX, -1), Some(cout_voix));
         assert_eq!(v(metrique::COUT_IA, -1), Some(cout::euros_tokens(20100.0) + cout_voix));
         assert_eq!(v(&metrique::requetes_ia("mistral"), 0), Some(40.0));

@@ -33,22 +33,25 @@ cout_texte = tokens_ia × (PART_ENTREE × ENTREE_USD + (1 − PART_ENTREE) × SO
 
 ```
 cout_voix = Σ caractères du moteur × voix_usd(moteur) / 1 000 000 × EUR_PAR_USD
+          + ms de dictée / 3 600 000 × DICTEE_USD_HEURE × EUR_PAR_USD
 ```
 
 Les caractères sont la carte `v` d'`aiLoad`, par moteur (`TTSProvider` de Roleo). `voix_usd` :
 
 | Moteur | Rôle | $ par million de caractères |
 |---|---|---|
-| `voxtral3` | Voxtral 3 (Mistral) | 13 |
+| `inworld` | Inworld TTS-2 Flash, voix des tuteurs depuis le 22 nov. 2026 (plan Builder) | 9 |
+| `voxtral3` | Voxtral 3 (Mistral), voix des tuteurs jusqu'au 22 nov. 2026 | 13 |
 | `kokoro` | Kokoro (DeepInfra), d'après sa facture | 1,485 |
 | `voxtral` | Voxtral mini | 16 |
 | `gemini` | Gemini Flash TTS | 20 |
 
 Un moteur sans prix fait lever le passage (`euros_voix`, « moteur de voix sans prix : … ») plutôt que de compter 0 : un nouveau moteur chez Roleo s'ajoute dans `voix_usd`, avec son prix. Exemple (test `cout`) : 1 million de caractères Voxtral 3 font 11,96 €.
 
+La dictée est le compteur `s` d'`aiLoad`, en ms d'audio transcrites par Inworld STT : `DICTEE_USD_HEURE` = 0,10 $ par heure (plan Builder), `euros_dictee`. Deux heures font 0,184 € (test `cout`).
+
 ## Ce qui n'est pas compté
 
-- Les transcriptions (dictée) n'ont pas de compteur côté Roleo : le coût réel de la voix est un peu au-dessus de `cout_voix`.
 - Les lectures du cache d'Anthropic ne sont pas dans `tk`.
 - La reprise chez un autre fournisseur passe par le même compteur `tk` : ses tokens sont comptés au prix de Haiku. C'est un ordre de grandeur, pas la facture.
 - L'infra Google, RevenueCat, la commission des stores.
