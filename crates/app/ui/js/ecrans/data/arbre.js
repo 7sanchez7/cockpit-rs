@@ -2,12 +2,16 @@
 // dimension. Une marche, un écran ou une valeur cliqué descend d'un niveau, une valeur écartée garde tous les autres,
 // le chemin remonte. Chaque geste relit la commande `arbre` et ne redessine que ce conteneur.
 
-import { h, rangee, bloc, enTetePanneau, pastille, point, vide } from "../../composants.js";
+import { h, s, rangee, bloc, enTetePanneau, pastille, point, vide, actualiser } from "../../composants.js";
 import { etat } from "../app/etat.js";
 import { icone, taux } from "../app/outils.js";
 
+// l'anneau du premier rond, dans un carré de 120 : centre, rayon, épaisseur, le jour entre deux arcs (en part du tour)
+const ANNEAU = { c: 60, r: 50, epaisseur: 12, jour: 0.006 };
+
 // les valeurs montrées avant « + N autres »
 const LIGNES = 12;
+const SOURCES_ARBRE = ["posthog", "revenuecat"];
 
 /** a : la lecture `arbre` de la commande data (debut, fin, racine). Rend le conteneur une fois l'arbre lu. */
 export async function arbre(ctx, a) {
@@ -84,16 +88,51 @@ export async function arbre(ctx, a) {
   }
 
   function entonnoir(e) {
-    const entete = enTetePanneau("Entonnoir du nœud", e.fragile && pastille("taux fragiles", { couleur: "var(--ambre)", aide: e.fragile }));
+    const entete = enTetePanneau("Entonnoir du nœud", e.fragile && pastille("taux fragiles", { couleur: "var(--ambre)", aide: e.fragile }), actualiser(...SOURCES_ARBRE));
     if (e.vide) return bloc(entete, vide(e.vide));
     return bloc(
       entete,
       h("div", { class: "marches" }, e.pas.map((p) => (p.type === "marche" ? marche(p) : passage(p)))),
       h("div", { class: "espace" }),
+      e.premierRond && premierRond(e.premierRond),
       h(
         "div",
         { class: "tuiles" },
-        e.tuiles.map((t) => h("div", { class: "tuile", title: t.aide }, h("span", { class: "libelle" }, t.libelle), h("span", { class: "valeur" }, t.valeur))),
+        e.tuiles.map((t) =>
+          h(
+            "div",
+            { class: "tuile", title: t.aide },
+            h("span", { class: "libelle" }, t.libelle),
+            h("div", { class: "tuile-valeur" }, h("span", { class: "valeur" }, t.valeur), ecart(t.ecart)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  function premierRond(p) {
+    return h(
+      "div",
+      { class: "premier-rond" },
+      h(
+        "div",
+        { class: "anneau", title: p.aide },
+        anneau(p.parts),
+        h("div", { class: "anneau-centre" }, h("span", { class: "valeur" }, p.centre), h("span", { class: "libelle" }, "commencent"), ecart(p.ecart)),
+      ),
+      h(
+        "div",
+        { class: "parts-rond" },
+        p.parts.map((q) =>
+          h(
+            "div",
+            { class: "part-rond", title: q.aide },
+            point(`var(--${q.couleur})`),
+            h("div", { class: "part-noms" }, h("span", { class: "nom" }, q.libelle), q.sous && h("span", { class: "sous" }, q.sous)),
+            h("span", { class: "valeur" }, q.valeur),
+            ecart(q.ecart) || h("span"),
+          ),
+        ),
       ),
     );
   }
@@ -112,7 +151,7 @@ export async function arbre(ctx, a) {
             "div",
             { class: "marche-taux" },
             h("span", { class: "taux-marche", style: { color: couleur } }, m.taux),
-            m.ecart && pastille(m.ecart.texte, { couleur: `var(--${m.ecart.couleur})`, aide: m.ecart.aide }),
+            ecart(m.ecart),
           ),
         m.filtre && h("span", { class: m.posee ? "coche-marche posee" : "coche-marche", style: { "--c": couleur } }, m.posee ? "✓" : "+"),
       ),
@@ -134,7 +173,7 @@ export async function arbre(ctx, a) {
   }
 
   function tunnel(t) {
-    const entete = enTetePanneau("Tunnel d'onboarding", h("span", { class: "accessoire-texte" }, "clique un écran pour garder ceux qui l'ont passé"));
+    const entete = enTetePanneau("Tunnel d'onboarding", h("span", { class: "accessoire-texte" }, "clique un écran pour garder ceux qui l'ont passé"), actualiser(...SOURCES_ARBRE));
     if (!t.etapes.length) return bloc(entete, vide("Aucun install sur la période."));
     return bloc(
       entete,
@@ -161,7 +200,7 @@ export async function arbre(ctx, a) {
     const montrees = tout ? d.lignes : d.lignes.slice(0, LIGNES);
     const cellules = (cs) => cs.map((c) => h("span", { class: "cellule-arbre", title: c.aide || null }, c.n != null && h("span", { class: c.taux ? "n" : "n seul" }, c.n), c.taux && taux(c.taux)));
     return bloc(
-      enTetePanneau(d.titre, h("span", { class: "accessoire-texte" }, d.texte)),
+      enTetePanneau(d.titre, h("span", { class: "accessoire-texte" }, d.texte), actualiser(...SOURCES_ARBRE)),
       h(
         "div",
         { class: "dimensions" },
@@ -243,4 +282,28 @@ export async function arbre(ctx, a) {
 
   await relire();
   return boite;
+}
+
+function ecart(e) {
+  return e && pastille(e.texte, { couleur: `var(--${e.couleur})`, aide: e.aide });
+}
+
+// un arc par part, dans le sens des aiguilles depuis le haut ; une part seule fait le tour entier
+function anneau(parts) {
+  const { c, r, epaisseur, jour } = ANNEAU;
+  const sur = (f) => {
+    const t = 2 * Math.PI * f - Math.PI / 2;
+    return `${(c + r * Math.cos(t)).toFixed(2)} ${(c + r * Math.sin(t)).toFixed(2)}`;
+  };
+  const visibles = parts.filter((q) => q.part > 0);
+  let debut = 0;
+  const arcs = visibles.map((q) => {
+    const trait = { fill: "none", "stroke-width": epaisseur, style: { stroke: `var(--${q.couleur})` } };
+    const titre = s("title", {}, `${q.libelle} : ${q.valeur}`);
+    if (visibles.length === 1) return s("circle", { cx: c, cy: c, r, ...trait }, titre);
+    const [de, a] = [debut + jour, debut + q.part - jour];
+    debut += q.part;
+    return a > de && s("path", { d: `M ${sur(de)} A ${r} ${r} 0 ${a - de > 0.5 ? 1 : 0} 1 ${sur(a)}`, ...trait }, titre);
+  });
+  return s("svg", { viewBox: "0 0 120 120", "aria-hidden": "true" }, arcs);
 }

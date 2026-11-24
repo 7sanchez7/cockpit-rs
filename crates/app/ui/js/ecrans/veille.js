@@ -294,7 +294,7 @@ function popoverMots(ancre, ctx) {
       "div",
       { class: "popover-mots" },
       h("div", { class: "titre-popover" }, "Mots-clés"),
-      h("div", { class: "note" }, "Ce que la veille cherche sur TikTok et Instagram toutes les 6 h ; les vidéos trouvées restent dans la bank."),
+      h("div", { class: "note" }, "Ce que la veille cherche sur TikTok et Instagram quand tu la lances ; les vidéos trouvées restent dans la bank."),
       mots.liste,
       formulaireMot(ctx),
       curseur(bank.curseur, ctx),
@@ -377,7 +377,8 @@ function curseur(c, ctx) {
 
 const ICONES_ETAPES = { pense: "etincelle", mots: "etiquette", cherche: "loupe", trouve: "videos", image: "image", analyse: "veille", retenue: "coche", echec: "alerte", info: "info" };
 
-function listeFils(d) {
+/** Les conversations ; le survol d'une ligne montre la poubelle, sauf pendant que Claude y cherche. */
+function listeFils(d, ctx) {
   return h(
     "aside",
     { class: "panneau-fils verre" },
@@ -389,16 +390,22 @@ function listeFils(d) {
         ? h("div", { class: "attente" }, "Tes conversations avec Claude restent ici.")
         : d.fils.map((f) =>
             h(
-              "button",
-              { class: "fil" + (f.id === d.fil ? " choisi" : ""), title: f.titre, onclick: () => ouvrirFil(f.id) },
-              h("span", { class: "titre" }, f.titre),
+              "div",
+              { class: "ligne-conversation" },
               h(
-                "span",
-                { class: "meta" },
-                f.etat === "en_cours" && point("var(--accent)", { mini: true, enCours: true, aide: "Claude cherche" }),
-                f.etat === "echouee" && point("var(--danger)", { mini: true, aide: "Échouée" }),
-                f.meta,
+                "button",
+                { class: "fil" + (f.id === d.fil ? " choisi" : ""), title: f.titre, onclick: () => ouvrirFil(f.id) },
+                h("span", { class: "titre" }, f.titre),
+                h(
+                  "span",
+                  { class: "meta" },
+                  f.etat === "en_cours" && point("var(--accent)", { mini: true, enCours: true, aide: "Claude cherche" }),
+                  f.etat === "echouee" && point("var(--danger)", { mini: true, aide: "Échouée" }),
+                  f.meta,
+                ),
               ),
+              f.etat !== "en_cours" &&
+                h("button", { class: "action-mot danger retirer-fil", title: "Supprimer la conversation", onclick: () => ctx.appeler("supprimer_fil_veille", { fil: f.id }) }, icone("poubelle")),
             ),
           ),
     ),
@@ -545,25 +552,33 @@ function barreSaisie(d, ctx) {
 
 function vueClaude(d, ctx, faites) {
   const fil = h("div", { class: "defile fil-chat", "data-defile": "chat" }, d.demandes.length === 0 ? accueilChat() : h("div", { class: "messages" }, d.demandes.map((dm, i) => echange(dm, ctx, faites, i === d.demandes.length - 1 && dm.etat === "echouee" && !d.occupe))));
-  return h("div", { class: "veille-chat remplit" }, listeFils(d), h("section", { class: "panneau-chat verre" }, fil, barreSaisie(d, ctx)));
+  return h("div", { class: "veille-chat remplit" }, listeFils(d, ctx), h("section", { class: "panneau-chat verre" }, fil, barreSaisie(d, ctx)));
 }
 
 // page
 
-function outils(ctx) {
+/** Les outils de l'en-tête, les mêmes dans les deux vues ; reposés seulement quand ils changent, pour que la bascule
+ *  Bank/Claude glisse sans que rien ne bouge. */
+let outilsPoses = null;
+
+function poserOutils(ctx) {
+  const tourne = ctx.enCours.includes("veille");
+  const cle = `${tourne}|${bank.mots.length}`;
+  if (outilsPoses?.cle === cle && outilsPoses.el.isConnected) return;
   const vues = segmente(VUES, etat.vue, (id) => {
     bas = id === "claude";
     return maj({ vue: id });
   });
   const ouvrirMots = (e) => popoverMots(e.currentTarget, ctx);
-  const lancer = ctx.enCours.includes("veille")
-    ? h("span", { class: "passage tourne" }, icone("relancer"), "Veille en cours")
-    : pilule("Lancer maintenant", () => ctx.appeler("relancer", { source: "veille" }), { icone: "relancer" });
-  return [
-    vues,
-    etat.vue === "bank" && pilule(["Mots-clés", h("span", { class: "nombre-pilule" }, bank.mots.length)], ouvrirMots, { icone: "etiquette", aide: "Les mots-clés qui nourrissent la bank" }),
-    lancer,
-  ].filter(Boolean);
+  // les deux libellés dans la même case : la pilule garde sa largeur quand la veille démarre
+  const lancer = h(
+    "button",
+    { class: "pilule lancer" + (tourne ? " tourne" : ""), disabled: tourne, onclick: () => ctx.appeler("relancer", { source: "veille" }) },
+    icone("relancer"),
+    h("span", { class: "libelles" }, h("span", { class: tourne ? "cache" : null }, "Lancer la veille"), h("span", { class: tourne ? null : "cache" }, "Veille en cours")),
+  );
+  ctx.page.outils(vues, pilule(["Mots-clés", h("span", { class: "nombre-pilule" }, bank.mots.length)], ouvrirMots, { icone: "etiquette", aide: "Les mots-clés qui nourrissent la bank" }), lancer);
+  outilsPoses = { cle, el: vues };
 }
 
 const ecran = {
@@ -596,7 +611,7 @@ const ecran = {
       const ancien = racine.querySelector("[data-defile=chat]");
       const enBas = !ancien || ancien.scrollHeight - ancien.scrollTop - ancien.clientHeight < PRES_DU_BAS;
       vue = vueClaude(c, ctx, faites);
-      ctx.page.outils(...outils(ctx));
+      poserOutils(ctx);
       poser(racine, vue);
       ajuster();
       const fil = racine.querySelector("[data-defile=chat]");
@@ -605,7 +620,7 @@ const ecran = {
       chat = null;
       ctx.page.sousTitre(d.sousTitre);
       vue = h("div", { class: "veille-bank remplit" }, panneauGrille(d, ctx, faites), panneauFiltres(d));
-      ctx.page.outils(...outils(ctx));
+      poserOutils(ctx);
       poser(racine, vue);
       if (haut) racine.querySelector("[data-defile=bank]").scrollTop = 0;
     }

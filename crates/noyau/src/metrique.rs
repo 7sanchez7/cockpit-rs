@@ -11,6 +11,8 @@ pub const ESSAIS: &str = "essais";
 pub const ESSAIS_J7: &str = "essais_j7";
 pub const RONDS: &str = "ronds";
 pub const RONDS_J7: &str = "ronds_j7";
+pub const RONDS_COMMENCES: &str = "ronds_commences";
+pub const RONDS_COMMENCES_J7: &str = "ronds_commences_j7";
 // RevenueCat
 pub const ACHATS: &str = "achats";
 pub const MRR_BRUT: &str = "mrr_brut";
@@ -70,8 +72,9 @@ impl Boutique {
         store.somme(business, TELECHARGEMENTS, &parts, jour)
     }
 
-    pub const SEPAREES: [&'static str; 18] = [
-        ACTIFS, ACTIFS_J7, ACTIFS_HEURE, INSTALLS, INSTALLS_J7, ESSAIS, ESSAIS_J7, RONDS, RONDS_J7,
+    pub const SEPAREES: [&'static str; 20] = [
+        ACTIFS, ACTIFS_J7, ACTIFS_HEURE, INSTALLS, INSTALLS_J7, ESSAIS, ESSAIS_J7, RONDS, RONDS_J7, RONDS_COMMENCES,
+        RONDS_COMMENCES_J7,
         ACHATS, MRR_BRUT, MRR_NET, ABONNES, ESSAIS_ACTIFS, REVENU_28J, REVENU, NOUVEAUX_CLIENTS, TELECHARGEMENTS,
     ];
 

@@ -1,7 +1,7 @@
 // Accueil : le revenu de la période en héros, six chiffres, la semaine, le score, les actifs, le fil et les vidéos ;
 // les réseaux à gauche et le plan de Notes à droite, repliables. Tout arrive écrit par la commande `accueil`.
 
-import { h, grilleKpi, rangee, bloc, enTetePanneau, legende, barres, surtitre, point, ligneFil, vide, pastille, chiffre, rendu } from "../composants.js";
+import { h, grilleKpi, rangee, bloc, enTetePanneau, legende, barres, surtitre, point, ligneFil, vide, pastille, chiffre, rendu, actualiser, RESEAUX } from "../composants.js";
 import { etat } from "./app/etat.js";
 import { choixBoutique, carteKpi } from "./app/outils.js";
 import { heros } from "./app/heros.js";
@@ -67,7 +67,7 @@ function lateraux(racine, ctx, vue) {
 function semaine(s) {
   const b = s.barres;
   return bloc(
-    enTetePanneau("Cette semaine", legende(b.legende.map((nom, i) => ({ nom, couleur: LEGENDE[i] })))),
+    enTetePanneau("Cette semaine", legende(b.legende.map((nom, i) => ({ nom, couleur: LEGENDE[i] }))), actualiser("revenuecat", "posthog")),
     h(
       "div",
       { class: "mini-chiffres" },
@@ -83,7 +83,7 @@ function serie(b) {
 
 function score(sc) {
   return bloc(
-    enTetePanneau("Score", h("span", { class: "accessoire-tag" }, "7 j contre 7 j")),
+    enTetePanneau("Score", h("span", { class: "accessoire-tag" }, "7 j contre 7 j"), actualiser(...RESEAUX, "posthog", "revenuecat")),
     radar(sc.axes, sc.aide),
     h(
       "div",
@@ -97,14 +97,14 @@ function score(sc) {
 }
 
 function actifs(b) {
-  return bloc(enTetePanneau(b.titre, legende(b.legende.map((nom, i) => ({ nom, couleur: LEGENDE[i] })))), serie(b));
+  return bloc(enTetePanneau(b.titre, legende(b.legende.map((nom, i) => ({ nom, couleur: LEGENDE[i] }))), actualiser("posthog")), serie(b));
 }
 
 function fil(evenements) {
   return h(
     "div",
     { class: "panneau-fil verre" },
-    h("div", { class: "fil-tete" }, point("var(--succes)"), h("span", { class: "h2" }, "En direct"), h("div", { class: "espace" }), h("span", { class: "fil-compte" }, `${evenements.length} récents`)),
+    h("div", { class: "fil-tete" }, point("var(--succes)"), h("span", { class: "h2" }, "En direct"), h("div", { class: "espace" }), h("span", { class: "fil-compte" }, `${evenements.length} récents`), actualiser("revenuecat", "posthog")),
     evenements.length ? h("div", { class: "fil" }, evenements.map((e) => ligneFil(e))) : vide("Rien sur la période : le fil se remplit à chaque collecte."),
   );
 }
@@ -115,7 +115,7 @@ function videos(ctx, v) {
   return h(
     "section",
     { class: "panneau-top verre" },
-    h("div", { class: "videos-tete" }, enTetePanneau(v.titre, pastille(v.seuil, { couleur: "var(--secondaire)" }))),
+    h("div", { class: "videos-tete" }, enTetePanneau(v.titre, pastille(v.seuil, { couleur: "var(--secondaire)" }), actualiser(...RESEAUX))),
     v.lignes.length
       ? h(
           "div",

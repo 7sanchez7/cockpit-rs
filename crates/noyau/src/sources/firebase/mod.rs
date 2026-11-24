@@ -48,7 +48,7 @@ pub struct Firebase;
 impl Source for Firebase {
     fn id(&self) -> &'static str { ID_SOURCE }
     fn nom(&self) -> &'static str { "Firebase" }
-    fn cadence(&self) -> i64 { 15 * 60 }
+    fn cadence(&self) -> Option<i64> { Some(15 * 60) }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let projets: Vec<(&Business, &String)> = ctx.businesses.iter()

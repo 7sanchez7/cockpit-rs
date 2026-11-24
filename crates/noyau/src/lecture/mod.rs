@@ -9,6 +9,7 @@ pub mod fenetre;
 pub mod format;
 pub mod noms;
 pub mod percee;
+pub mod rond;
 pub mod recherche;
 pub mod sante;
 pub mod veille;

@@ -76,15 +76,18 @@ impl Store {
         Ok(())
     }
 
-    /// Les comptes dont la médiane manque ou date de plus de 7 jours, ceux des plus grosses vidéos d'abord.
-    pub fn comptes_a_baser(&self, plateforme: Plateforme, limite: i64, maintenant: &Date) -> Res<Vec<String>> {
+    /// Les comptes dont la médiane manque ou date de plus de 7 jours, avec `true` quand l'une de leurs vidéos n'a encore
+    /// aucune vue : ceux-là d'abord (la relecture du profil les leur donne), puis ceux des plus grosses vidéos.
+    pub fn comptes_a_baser(&self, plateforme: Plateforme, limite: i64, maintenant: &Date) -> Res<Vec<(String, bool)>> {
         Ok(self.db.query("
             select c.handle,
                 (select max(r.vues) from veille_video v join veille_releve r on r.video = v.id
-                 where v.plateforme = c.plateforme and v.compte = c.handle) as top
+                 where v.plateforme = c.plateforme and v.compte = c.handle) as top,
+                exists (select 1 from veille_video v where v.plateforme = c.plateforme and v.compte = c.handle
+                    and not exists (select 1 from veille_releve r where r.video = v.id and r.vues is not null)) as sans_vues
             from veille_compte c where c.plateforme = ? and (c.base_at is null or c.base_at < ?)
-            order by top desc limit ?", p![plateforme.brut(), *maintenant - Duration::days(7), limite])?
-            .iter().filter_map(|l| l.texte("handle")).collect())
+            order by sans_vues desc, top desc limit ?", p![plateforme.brut(), *maintenant - Duration::days(7), limite])?
+            .iter().filter_map(|l| Some((l.texte("handle")?, l.booleen("sans_vues")))).collect())
     }
 
     /// La médiane d'un compte, relue sur son profil ; `mediane` None = trop peu de vidéos, on ne retente qu'après 7 jours.
@@ -158,6 +161,15 @@ impl Store {
         self.db.execute("update veille_demande set fin = ?, etat = ?, synthese = ?, erreur = ? where id = ?",
             p![fin, etat, synthese, erreur, id])?;
         Ok(())
+    }
+
+    /// Une conversation effacée : ses demandes et ce qu'elles ont gardé. Les vidéos restent dans la bank, les coûts aussi.
+    pub fn supprimer_fil(&self, fil: &str) -> Res<()> {
+        self.lot(|| {
+            self.db.execute("delete from veille_retenue where demande in (select id from veille_demande where coalesce(fil, id) = ?)", p![fil])?;
+            self.db.execute("delete from veille_demande where coalesce(fil, id) = ?", p![fil])?;
+            Ok(())
+        })
     }
 
     /// Une vidéo gardée pour une demande, à la suite des autres ; la garder de nouveau change sa raison.

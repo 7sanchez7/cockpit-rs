@@ -67,6 +67,8 @@ Le catalogue des métriques est fermé : une métrique nouvelle s'ajoute ici et 
 | `essais_j7` | `ESSAIS_J7` | -1 | essais | PostHog | idem, J-7 jusqu'à la même heure |
 | `ronds` | `RONDS` | -1 | ronds | PostHog | événement `usage` (`path_round_done` par défaut) |
 | `ronds_j7` | `RONDS_J7` | -1 | ronds | PostHog | idem, J-7 jusqu'à la même heure |
+| `ronds_commences` | `RONDS_COMMENCES` | -1 | ronds | PostHog | événement `commence` (`path_round_started` par défaut) |
+| `ronds_commences_j7` | `RONDS_COMMENCES_J7` | -1 | ronds | PostHog | idem, J-7 jusqu'à la même heure |
 | `achats` | `ACHATS` | -1 | achats | RevenueCat | premières transactions payantes du jour (nouvel abonnement payé, fin d'essai payée) |
 | `mrr_brut` | `MRR_BRUT` | -1 | $ | RevenueCat | MRR de l'overview RevenueCat, dernier relevé du jour |
 | `mrr_net` | `MRR_NET` | -1 | $ | RevenueCat | `mrr_brut × PART_NETTE` (0,72 : TVA puis commission du store) |
@@ -240,17 +242,23 @@ Un fil relu remplace tous ses messages.
 
 ### `install`, `paiement` et `porte`
 
-L'arbre des installs de l'écran Data. PostHog réécrit `install` et `porte` au plus une fois par heure sur les `JOURS_INSTALLS` (97) derniers jours ; RevenueCat remplit `paiement` pour les installs qui ont converti. Modèles : `Install`, `EtatPaiement`, `Porte`. Les anciennes tables `cohorte`, `entonnoir` et `decoupe` sont effacées au lancement.
+L'arbre des installs de l'écran Data et les ronds de ses nœuds ; `porte` n'est plus affichée, elle se lit par `cockpit sql`. PostHog réécrit `install` et `porte` au plus une fois par heure sur les `JOURS_INSTALLS` (97) derniers jours, iPhone, iPad et Android ; RevenueCat remplit `paiement` pour les installs qui ont converti. Modèles : `Install`, `EtatPaiement`, `Porte`. Les anciennes tables `cohorte`, `entonnoir` et `decoupe` sont effacées au lancement.
 
 | `install` | Contenu |
 |---|---|
 | `business`, `jour` | jour d'install à Paris (premier événement `installation`) |
 | `loin` | rang de l'écran du tunnel le plus loin atteint, 0 à 17 (`posthog::ECRANS`, le paywall compris) |
 | `paywall`, `essai`, `direct` | 0 ou 1 : a vu le paywall, a pris l'essai, a acheté sans essai |
+| `commence` | 0 ou 1 : a fait l'événement `commence` ou fini un rond ; 0 sur une ligne d'avant la colonne, jusqu'au passage horaire suivant de PostHog |
 | `rond` | 0 ou 1 : a fait l'événement `usage` au moins une fois |
 | `j1`, `j7`, `j14`, `j30` | 0 ou 1 : a fait l'événement `usage` entre N et N+1 jours après l'install ; ne compte qu'une fois le jour d'install complet |
 | `client` | l'id RevenueCat (`distinct_id` de l'essai ou de l'achat) s'il a converti, nul sinon |
-| `valeurs` | objet JSON, une liste de valeurs par `Dimension` répondue : `{"age":["18_24"],"interet":["music","series"],"pays":["FR"],"version":["2.0.3"],"build":["49"],"zone":["europe"]}`. Une dimension absente = pas répondu. `zone` est déduite du pays au décodage (`Dimension::zone`) |
+| `personne` | le `person_id` PostHog, la clé pour rejoindre `evenement.personne` |
+| `commences`, `ronds` | nombre d'événements `commence`, nombre de ronds finis (`usage`) |
+| `jours_ronds` | jours de Paris distincts avec au moins un rond fini |
+| `premier_rond` | secondes de l'install au premier rond commencé ou fini, nul sans rond |
+| `dernier_rond` | jour de Paris du dernier rond fini, nul sans rond |
+| `valeurs` | objet JSON, une liste de valeurs par `Dimension` répondue : `{"age":["18_24"],"interet":["music","series"],"pays":["FR"],"version":["2.0.3"],"build":["49"],"plateforme":["iOS"],"zone":["europe"]}`. Une dimension absente = pas répondu. `zone` est déduite du pays au décodage (`Dimension::zone`) |
 
 `Store::installs(business, debut, lignes)` efface les lignes depuis `debut`, puis écrit les nouvelles, dans une transaction.
 
@@ -267,6 +275,35 @@ L'arbre des installs de l'écran Data. PostHog réécrit `install` et `porte` au
 | `business`, `jour`, `porte` | jour à Paris et porte du paywall (`properties.source` de l'événement `paywall`, vide pour les anciennes versions) |
 | `vues`, `essais`, `directs` | paywalls vus, essais gratuits, achats sans essai |
 
+Les colonnes `commence` à `dernier_rond` sont venues après la table : une ligne d'avant les a à 0 ou nulles jusqu'au passage horaire suivant de PostHog, qui réécrit les 97 jours.
+
+### `evenement`
+
+Les événements de l'app un par un, avec leurs propriétés : tout ce que l'écran Data ne précalcule pas se lit ici. PostHog y ajoute à chaque passage ce qui est arrivé depuis le curseur (`sources/posthog.md` § Événements). Les noms gardés sont ceux de `config.evenements.detail` du business (23 pour Roleo : tunnel, paywall, essai, achat, rond, réponse, aide, bilan, ouverture, notification, avis). Modèle : `EvenementApp`.
+
+| Colonne | Contenu |
+|---|---|
+| `business`, `uuid` | clé primaire, l'uuid PostHog de l'événement ; une relecture remplace la ligne |
+| `personne` | le `person_id` PostHog, le même que `install.personne` |
+| `at`, `jour` | instant ISO UTC, jour de Paris |
+| `nom` | le nom de l'événement (`path_round_done`…) |
+| `plateforme`, `build` | `$os` (`iOS`, `iPadOS`, `Android`), `$app_build`, vides s'ils manquent |
+| `props` | objet JSON des propriétés de l'app, sans celles de PostHog (`$…`) : `{"replies":6,"rights":4,"elapsed_s":150}` |
+
+Index : `(business, nom, jour)` et `(business, personne, at)`. Pas de purge : environ 420 octets par événement, index compris ; 120 Mo pour les 300 000 événements du 16 août au 20 nov. 2026, et environ 5 Mo par jour (12 000 événements) en novembre.
+
+Pour interroger : `cockpit sql "<select>"` ([`cli.md`](cli.md)), ou `sqlite3 -readonly "<base>"` (chemin en tête de ce fichier). Une propriété se lit par `json_extract(props, '$.elapsed_s')`. Exemples :
+
+```sql
+-- ronds finis et durée médiane approchée par jour
+select jour, count(*), avg(json_extract(props, '$.elapsed_s')) from evenement
+where business = 'roleo' and nom = 'path_round_done' group by jour order by jour desc;
+-- le parcours d'un install
+select at, nom, props from evenement e join install i on i.personne = e.personne and i.business = e.business
+where i.business = 'roleo' and i.jour = '2026-11-20' and i.essai = 1 order by e.personne, at;
+```
+
+Les jours avant `posthog.evenements.depuis.<business>` (§ `reglage`) ne sont pas complets : l'écran Data n'y lit rien.
 ### `veille_mot`, `veille_compte`, `veille_video`, `veille_releve`, `veille_analyse`, `veille_cout`, `veille_demande` et `veille_retenue`
 
 La veille par mots-clés, à part des tables `compte` et `video` : les comptes trouvés ne sont pas suivis, leurs vidéos ne sont pas les nôtres. Écrite par la source Veille ([`sources/veille.md`](sources/veille.md)), par `crates/noyau/src/store_veille.rs`, les modèles dans `crates/noyau/src/modeles_veille.rs`.
@@ -284,7 +321,7 @@ Retirer un mot supprime sa ligne seulement : ses vidéos restent.
 |---|---|
 | `id` | `<plateforme>:<handle>` |
 | `plateforme`, `handle`, `abonnes` | |
-| `mediane`, `nb_base`, `base_at` | médiane des vues, nombre de vidéos lues, date (`Store::base`) ; `comptes_a_baser` rend ceux à relire |
+| `mediane`, `nb_base`, `base_at` | médiane des vues, nombre de vidéos lues, date (`Store::base`) ; `comptes_a_baser` rend ceux à relire, ceux qui ont une vidéo sans vues d'abord |
 | `decouvert` | premier passage qui l'a vu |
 
 | `veille_video` | Contenu |
@@ -327,6 +364,8 @@ Une demande à Claude depuis l'écran Veille ([`sources/veille.md`](sources/veil
 | `synthese`, `erreur` | la synthèse de Haiku, ou ce qui l'a arrêtée (`finir_demande`) |
 | `fil` | l'id de la première demande de sa conversation ; nul pour les demandes d'avant les conversations, lues comme `coalesce(fil, id)` |
 
+Supprimer une conversation (`Store::supprimer_fil`) efface ses demandes et leurs `veille_retenue` d'un coup ; les vidéos restent dans la bank, les coûts dans `veille_cout`.
+
 | `veille_retenue` | Contenu |
 |---|---|
 | `demande`, `video` | clé primaire ; `video` est un `veille_video.id` (`retenir_video`) |
@@ -368,4 +407,6 @@ Clé, valeur texte (`Store::reglage`, `regler`, qui efface la clé pour `None`) 
 | `collecte.pause` | `1` met le collecteur en pause (`REGLAGE_PAUSE`) |
 | `veille.videos` | vidéos gardées par mot-clé et par plateforme à chaque passage de la Veille, de 10 à 100 (`REGLAGE_VIDEOS`), absent = 40 ; la version Swift l'ignore |
 | `posthog.horaire.<business>` | instant ISO du dernier calcul de `install` et `porte`, refaits au plus une fois par heure |
+| `posthog.evenements.<business>` | curseur de la table `evenement` : millisecondes Unix du dernier événement lu, par heure d'arrivée chez PostHog (`created_at`) |
+| `posthog.evenements.depuis.<business>` | premier jour de Paris que `evenement` couvre entier, posé au premier passage (97 jours avant) ; la version Swift l'ignore |
 | `graine` | date ISO de modification de la graine déjà appliquée |

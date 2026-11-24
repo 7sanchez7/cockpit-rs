@@ -68,7 +68,11 @@ pub struct Evenements {
     pub paywall: String,
     pub essai: String,
     pub achat: String,
+    /// Rond commencé, puis rond fini.
+    pub commence: String,
     pub usage: String,
+    /// Les événements gardés un par un, avec leurs propriétés (table `evenement`).
+    pub detail: Vec<String>,
 }
 
 impl Default for Evenements {
@@ -76,7 +80,16 @@ impl Default for Evenements {
         Evenements {
             installation: "onboarding_started".into(), etape: "onboarding_step_completed".into(),
             paywall: "paywall_viewed".into(), essai: "trial_started".into(), achat: "purchase_completed".into(),
-            usage: "path_round_done".into(),
+            commence: "path_round_started".into(), usage: "path_round_done".into(),
+            detail: [
+                "onboarding_started", "onboarding_step_completed", "onboarding_completed", "onboarding_failed",
+                "paywall_viewed", "paywall_cta_tapped", "trial_started", "purchase_completed", "purchase_failed",
+                "path_round_started", "path_reply", "path_reply_failed", "path_help_used", "path_round_paused",
+                "path_round_left", "path_round_done", "path_bilan_viewed", "path_bilan_answered", "path_bilan_closed",
+                "app_opened", "notif_opened", "notif_prompt_answered", "rating_sheet_answered",
+            ]
+            .map(String::from)
+            .into(),
         }
     }
 }
@@ -101,6 +114,7 @@ mod tests {
         assert_eq!(b.config.genre, 6017);
         assert_eq!(b.config.evenements.essai, "x");
         assert_eq!(b.config.evenements.achat, "purchase_completed");
+        assert!(b.config.evenements.detail.iter().any(|x| x == "path_reply"));
         let s = serde_json::to_string(&b.config).unwrap();
         assert!(s.contains("objectifMensuelEUR") && !s.contains("appStoreId"));
     }

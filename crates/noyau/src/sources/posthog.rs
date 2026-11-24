@@ -1,4 +1,5 @@
-//! Actifs, installs, essais, ronds, actifs par heure, fil des essais, détail de chaque install et portes du paywall, en HogQL.
+//! Actifs, installs, essais, ronds commencés et finis, actifs par heure, fil des essais, détail de chaque install, portes du paywall
+//! et événements de l'app un par un, en HogQL.
 //! Voir docs/sources/posthog.md ; le décodage et l'écriture sont dans `posthog/decodage.rs`.
 mod decodage;
 #[cfg(test)]
@@ -25,7 +26,7 @@ pub const CLE_API: &str = "POSTHOG_PERSONAL_API_KEY";
 impl Source for PostHog {
     fn id(&self) -> &'static str { "posthog" }
     fn nom(&self) -> &'static str { "PostHog" }
-    fn cadence(&self) -> i64 { 15 * 60 }
+    fn cadence(&self) -> Option<i64> { Some(15 * 60) }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let suivis: Vec<&Business> =
@@ -48,8 +49,9 @@ async fn collecte(b: &Business, ctx: &Contexte) -> Res<usize> {
     let projet = ctx.secrets.valeur(CLE_PROJET, b).await?;
     let cle = ctx.secrets.valeur(CLE_API, b).await?;
     let url = format!("{}/api/projects/{projet}/query/", b.config.posthog_host.as_deref().unwrap_or(""));
-    let hogql = |requete: String| {
-        let r = Requete::new(url.as_str(), "POST").jeton(&cle).json(&json!({"query": {"kind": "HogQLQuery", "query": requete}}));
+    let requete = |q: String| Requete::new(url.as_str(), "POST").jeton(&cle).json(&json!({"query": {"kind": "HogQLQuery", "query": q}}));
+    let hogql = |q: String| {
+        let r = requete(q);
         async move { decodage::lignes(&ctx.http.objet(&r).await?) }
     };
 
@@ -84,13 +86,45 @@ async fn collecte(b: &Business, ctx: &Contexte) -> Res<usize> {
         l.horaire = Some(Horaire { debut, installs, portes });
     }
 
-    ctx.store.lot(|| {
+    let mut n = ctx.store.lot(|| {
         let n = ecrire(&l, &b.id, &jours, &jours_heures, &maintenant, &ctx.store)?;
         if l.horaire.is_some() {
             ctx.store.regler(&cle_horaire, Some(&jour::iso(&maintenant)))?;
         }
         Ok(n)
-    })
+    })?;
+
+    // événements un par un, par pages, depuis le curseur (au premier passage, la fenêtre des installs)
+    if e.detail.is_empty() {
+        return Ok(n);
+    }
+    let cle_curseur = format!("posthog.evenements.{}", b.id);
+    let mut curseur = match ctx.store.reglage(&cle_curseur)?.and_then(|s| s.parse::<i64>().ok()) {
+        Some(c) => c,
+        None => {
+            // le premier jour couvert entier, pour que l'écran Data ne compare pas à des jours à moitié relus
+            let premier = jour::decale(&aujourdhui, -JOURS_INSTALLS);
+            ctx.store.regler(&format!("{CLE_EVENEMENTS_DEPUIS}{}", b.id), Some(&premier))?;
+            minuit(&premier)? * 1000
+        }
+    };
+    let mut depuis = curseur - MARGE_EVENEMENTS_MS;
+    for _ in 0..PAGES_EVENEMENTS {
+        let page = decodage::evenements(&decodage::page(&ctx.http.objet(&requete(requete_evenements(e, depuis))).await?)?)?;
+        let dernier = page.last().map_or(depuis, |x| x.recu_ms);
+        curseur = curseur.max(dernier);
+        ctx.store.lot(|| {
+            ctx.store.evenements_app(&b.id, &page)?;
+            ctx.store.regler(&cle_curseur, Some(&curseur.to_string()))
+        })?;
+        n += page.len();
+        if page.len() < PAGE_EVENEMENTS {
+            break;
+        }
+        // une page pleine d'événements arrivés à la même milliseconde ne bloque pas le curseur
+        depuis = if dernier > depuis { dernier } else { depuis + 1 };
+    }
+    Ok(n)
 }
 
 /// La même heure de Paris 7 jours plus tôt, en secondes Unix (7 × 24 h si ce jour-là n'a pas cette heure).
@@ -108,7 +142,8 @@ pub const BRUIT: &str = "('$identify', '$set', '$feature_flag_called', '$opt_in'
 /// Jours de séries relus quand l'historique a un trou : les 90 jours complets de la plus longue période de l'en-tête, plus aujourd'hui.
 pub const JOURS_HISTORIQUE: i64 = 91;
 
-/// L'événement `usage` ne part de façon fiable chez Roleo que depuis la 2.0.1 : avant, rond fini et retours ne sont pas mesurés.
+/// Les événements `commence` et `usage` ne partent de façon fiable chez Roleo que depuis la 2.0.1 : avant, ronds et retours
+/// ne sont pas mesurés.
 pub const RONDS_DEPUIS: &str = "2026-10-15";
 
 /// Les écrans du tunnel de Roleo dans l'ordre, clé PostHog et nom affiché ; `paywall_viewed` y tient lieu de l'événement `paywall`.
@@ -126,6 +161,18 @@ pub const SEGMENTS: [Option<Boutique>; 3] = [None, Some(Boutique::AppStore), Som
 
 /// Les jours d'install recalculés à chaque heure : 90 jours, plus de quoi comparer une semaine.
 pub const JOURS_INSTALLS: i64 = 97;
+/// Suivi de l'id du business : le premier jour que la table `evenement` couvre entier.
+pub const CLE_EVENEMENTS_DEPUIS: &str = "posthog.evenements.depuis.";
+
+/// Une page d'événements, et le nombre de pages lues par passage (le rattrapage du premier passage en prend plusieurs).
+pub const PAGE_EVENEMENTS: usize = 10_000;
+pub const PAGES_EVENEMENTS: usize = 30;
+
+/// Chaque passage relit la dernière heure d'arrivées : un événement peut devenir lisible après un plus récent.
+pub const MARGE_EVENEMENTS_MS: i64 = 3_600_000;
+
+/// Un événement arrivé chez PostHog plus de 30 jours après son instant est perdu : la borne garde la lecture sur la clé de tri.
+pub const RETARD_MAX_JOURS: i64 = 30;
 
 const OS: &str = "properties.$os";
 
@@ -146,10 +193,10 @@ pub fn filtre(b: Option<Boutique>, os: &str) -> String {
     }
 }
 
-/// Par jour de Paris et pour chaque segment : actifs, essais, ronds finis, chacun en entier puis avant la coupe.
+/// Par jour de Paris et pour chaque segment : actifs, essais, ronds finis, ronds commencés, chacun en entier puis avant la coupe.
 pub fn requete_jours(e: &Evenements, depuis: i64, coupe: i64) -> String {
     let avant = format!("timestamp < fromUnixTimestamp({coupe})");
-    let (essai, usage) = (&e.essai, &e.usage);
+    let (essai, usage, commence) = (&e.essai, &e.usage, &e.commence);
     let colonnes: Vec<String> = SEGMENTS
         .iter()
         .map(|b| {
@@ -157,7 +204,8 @@ pub fn requete_jours(e: &Evenements, depuis: i64, coupe: i64) -> String {
             format!(
                 "uniqExactIf(person_id, {s}), uniqExactIf(person_id, {s} and {avant}),
     countIf(event = '{essai}' and {s}), countIf(event = '{essai}' and {s} and {avant}),
-    countIf(event = '{usage}' and {s}), countIf(event = '{usage}' and {s} and {avant})"
+    countIf(event = '{usage}' and {s}), countIf(event = '{usage}' and {s} and {avant}),
+    countIf(event = '{commence}' and {s}), countIf(event = '{commence}' and {s} and {avant})"
             )
         })
         .collect();
@@ -217,18 +265,19 @@ order by timestamp desc limit 200",
     )
 }
 
-/// Les personnes installées depuis `depuis`, iOS ou iPadOS.
+/// Les personnes installées depuis `depuis`, sur iPhone, iPad ou Android.
 fn installes(e: &Evenements, depuis: i64) -> String {
     format!(
         "select person_id from events where event = '{}' group by person_id
-having min(timestamp) >= fromUnixTimestamp({depuis}) and argMin(properties.$os, timestamp) in ('iOS', 'iPadOS')",
+having min(timestamp) >= fromUnixTimestamp({depuis}) and argMin(properties.$os, timestamp) in ('iOS', 'iPadOS', 'Android')",
         e.installation
     )
 }
 
 /// Une ligne par install : jour d'install, rang de l'écran le plus loin atteint, paywall vu, essai gratuit, achat sans essai,
-/// rond fini, rond fini entre N et N+1 jours après l'install (1, 7, 14, 30), l'id RevenueCat s'il a converti,
-/// puis la valeur de chaque `Dimension`.
+/// rond commencé (un rond fini compte, si son début s'est perdu), rond fini, rond fini entre N et N+1 jours après l'install (1, 7, 14, 30), l'id RevenueCat s'il a converti,
+/// la personne PostHog, ronds commencés, ronds finis, jours de Paris avec un rond fini, secondes de l'install au premier rond
+/// (-1 sans rond), jour du dernier rond fini, puis la valeur de chaque `Dimension`.
 pub fn requete_par_install(e: &Evenements, depuis: i64) -> String {
     let cles = ECRANS.iter().map(|(c, _)| format!("'{c}'")).collect::<Vec<_>>().join(", ");
     let retours = [1, 7, 14, 30]
@@ -236,9 +285,10 @@ pub fn requete_par_install(e: &Evenements, depuis: i64) -> String {
         .join(", ");
     let valeurs = Dimension::lues().map(|d| format!("{} as v_{}", valeur(d, e), d.brut())).collect::<Vec<_>>();
     let noms = Dimension::lues().map(|d| format!("v_{}", d.brut())).collect::<Vec<_>>();
-    let Evenements { installation, etape, paywall, essai, achat, usage } = e;
+    let Evenements { installation, etape, paywall, essai, achat, commence, usage, .. } = e;
     format!(
-        "select toString(toDate(toTimeZone(f, 'Europe/Paris'))) as jour, loin, vu, essai, direct, rond, r1, r7, r14, r30, client,
+        "select toString(toDate(toTimeZone(f, 'Europe/Paris'))) as jour, loin, vu, essai, direct, commence, rond, r1, r7, r14, r30, client,
+    toString(person_id), commences, length(finis), jours_ronds, premier_rond, dernier_rond,
     {noms}
 from (select person_id, minIf(timestamp, event = '{installation}') as f, toUnixTimestamp(f) as fu,
         arrayMax(arrayMap(x -> indexOf([{cles}], x),
@@ -247,13 +297,18 @@ from (select person_id, minIf(timestamp, event = '{installation}') as f, toUnixT
         countIf(event = '{paywall}') > 0 as vu, countIf(event = '{essai}') > 0 as essai,
         countIf(event = '{achat}') > 0 and countIf(event = '{essai}') = 0 as direct,
         groupArrayIf(toUnixTimestamp(timestamp), event = '{usage}') as finis, length(finis) > 0 as rond,
+        (countIf(event = '{commence}') > 0 or rond) as commence,
         {retours},
+        countIf(event = '{commence}') as commences,
+        uniqExactIf(toDate(toTimeZone(timestamp, 'Europe/Paris')), event = '{usage}') as jours_ronds,
+        if(commence, greatest(toUnixTimestamp(minIf(timestamp, event in ('{commence}', '{usage}'))) - fu, 0), -1) as premier_rond,
+        if(rond, toString(toDate(toTimeZone(maxIf(timestamp, event = '{usage}'), 'Europe/Paris'))), '') as dernier_rond,
         if(essai or direct, ifNull(argMaxIf(distinct_id, timestamp, event in ('{essai}', '{achat}')), ''), '')
             as client,
         {valeurs}
       from events
       where timestamp >= fromUnixTimestamp({depuis}) and person_id in ({installes})
-          and event in ('{installation}', '{etape}', '{paywall}', '{essai}', '{achat}', '{usage}')
+          and event in ('{installation}', '{etape}', '{paywall}', '{essai}', '{achat}', '{commence}', '{usage}')
       group by person_id)
 order by f limit 50000",
         noms = noms.join(", "),
@@ -296,8 +351,23 @@ fn valeur(d: Dimension, e: &Evenements) -> String {
         Dimension::Version => premiere("$app_version", &installation),
         Dimension::Build => premiere("$app_build", &installation),
         Dimension::Produit => premiere("product", &format!("'{}', '{}'", e.essai, e.achat)),
+        Dimension::Plateforme => premiere("$os", &installation),
         Dimension::Zone => unreachable!("la zone se déduit du pays, hors de Dimension::lues"),
     }
+}
+
+/// Les événements `detail` arrivés chez PostHog depuis `depuis_ms`, dans l'ordre d'arrivée (`created_at`), propriétés `$…` à part.
+pub fn requete_evenements(e: &Evenements, depuis_ms: i64) -> String {
+    let noms = e.detail.iter().map(|x| format!("'{x}'")).collect::<Vec<_>>().join(", ");
+    let instant = depuis_ms / 1000 - RETARD_MAX_JOURS * 86_400;
+    format!(
+        "select toString(uuid), toString(person_id), toUnixTimestamp(timestamp), toUnixTimestamp64Milli(created_at), event,
+    ifNull(toString({OS}), ''), ifNull(toString(properties.$app_build), ''), toString(toDate(toTimeZone(timestamp, 'Europe/Paris'))),
+    arrayFilter(x -> not startsWith(x.1, '$'), JSONExtractKeysAndValuesRaw(properties))
+from events
+where created_at >= fromUnixTimestamp64Milli({depuis_ms}) and timestamp >= fromUnixTimestamp({instant}) and event in ({noms})
+order by created_at, uuid limit {PAGE_EVENEMENTS}"
+    )
 }
 
 /// Par jour de Paris et par porte du paywall (`source`) : paywalls vus, essais gratuits, achats sans essai.

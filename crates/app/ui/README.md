@@ -65,7 +65,7 @@ Le contexte :
 
 ## Composants
 
-La liste exacte et leurs options sont en tête de `js/composants.js`. Les plus courants : `h(tag, attrs, ...enfants)`, `remplacer(el, ...enfants)` (le `replaceChildren` natif écrirait les tableaux et les `false` en texte), `panneau`, `rangee`, `segmente`, `pilule`, `kpi` et `grilleKpi`, `chiffre`, `sparkline`, `courbe`, `barres`, `avatar`, `miniature`, `ligneFil`, `caseRonde`, `pastille`, `point`, `vide`.
+La liste exacte et leurs options sont en tête de `js/composants.js`. Les plus courants : `h(tag, attrs, ...enfants)`, `remplacer(el, ...enfants)` (le `replaceChildren` natif écrirait les tableaux et les `false` en texte), `panneau`, `rangee`, `segmente`, `pilule`, `kpi` et `grilleKpi`, `chiffre`, `sparkline`, `courbe`, `barres`, `avatar`, `miniature`, `ligneFil`, `caseRonde`, `pastille`, `point`, `vide`. Pour le bouton de rafraîchissement d'un panneau : `actualiser(...sources)` (à poser dans l'`accessoire` du panneau, `RESEAUX` pour les quatre réseaux) ; `suivreCollecte(sources, enCours)`, appelé par `majBarre` dans `app.js`, le fait tourner.
 
 ## Raccourcis
 

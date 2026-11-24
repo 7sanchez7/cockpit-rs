@@ -99,6 +99,7 @@ pub fn commandes() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'stati
         veille::regler_videos,
         veille::demander_veille,
         veille::chat_veille,
+        veille::supprimer_fil_veille,
         accueil::accueil,
         accueil::cocher_tache,
         accueil::ouvrir_notes,

@@ -25,7 +25,7 @@ pub struct Notes;
 impl Source for Notes {
     fn id(&self) -> &'static str { "notes" }
     fn nom(&self) -> &'static str { "Notes" }
-    fn cadence(&self) -> i64 { 60 }
+    fn cadence(&self) -> Option<i64> { Some(60) }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let lignes = lignes(&note(&lire()?)?);

@@ -212,6 +212,10 @@ img { display: block; }
 }
 .pilule:hover { background: var(--blanc-actif); }
 .pilule:active { transform: scale(var(--appui)); }
+.pilule:disabled { background: var(--blanc-pilule); color: var(--secondaire); transform: none; }
+.libelles { display: inline-grid; }
+.libelles > * { grid-area: 1 / 1; }
+.libelles > .cache { visibility: hidden; }
 
 /* KPI */
 .grille-kpi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--e-xl); }
@@ -863,7 +867,7 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 .carte-ajout .plus { font: var(--f-symbole-grand); }
 
 /* panneau des vidéos */
-.panneau-videos { --rayon: var(--r-panneau); display: flex; flex-direction: column; min-width: 0; padding: var(--e-xxl) 0 var(--e-l); }
+.panneau-videos { --rayon: var(--r-panneau); display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: var(--e-xxl) 0 var(--e-l); }
 .panneau-videos .marge { padding: 0 var(--e-panneau); margin-bottom: var(--e-l); }
 .panneau-videos .marge.filtres { display: flex; align-items: center; gap: var(--e-m); margin-bottom: var(--e-m); }
 .panneau-videos .espace { flex: 1; }
@@ -1016,7 +1020,7 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 
 .passage { display: inline-flex; align-items: center; gap: var(--e-m); font: var(--f-label); color: var(--secondaire); }
 /* bank : la grille, ses filtres à droite */
-.veille-bank { display: grid; grid-template-columns: minmax(0, 1fr) var(--t-filtres); gap: var(--e-xl); }
+.veille-bank { display: grid; grid-template-columns: minmax(0, 1fr) var(--t-filtres); grid-template-rows: minmax(0, 1fr); gap: var(--e-xl); }
 .compteur-bank { font: var(--f-label); color: var(--secondaire); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .compteur-bank .total { font: var(--f-h2); color: var(--texte); }
 .compteur-bank .sur { color: var(--tertiaire); }
@@ -1127,7 +1131,7 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 .nombre-pilule { font: var(--f-tag); color: var(--secondaire); font-variant-numeric: tabular-nums; }
 
 /* conversation avec Claude */
-.veille-chat { display: grid; grid-template-columns: var(--t-fils) minmax(0, 1fr); gap: var(--e-xl); }
+.veille-chat { display: grid; grid-template-columns: var(--t-fils) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: var(--e-xl); }
 .panneau-fils { --rayon: var(--r-panneau); display: flex; flex-direction: column; gap: var(--e-m); min-height: 0; padding: var(--e-l); }
 .nouveau-fil {
   display: flex;
@@ -1148,6 +1152,13 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 .panneau-fils .defile::-webkit-scrollbar { display: none; }
 .panneau-fils .attente { padding: var(--e-m) var(--e-l); }
 .fil { display: flex; flex-direction: column; gap: var(--e-xs); padding: var(--e-m) var(--e-l); border-radius: var(--r-ligne); text-align: left; transition: background-color var(--duree-survol); }
+.ligne-conversation { position: relative; display: flex; flex-direction: column; }
+.retirer-fil { position: absolute; top: 50%; right: var(--e-m); translate: 0 -50%; opacity: 0; transition: opacity var(--duree-survol), color var(--duree-survol), background-color var(--duree-survol); }
+.ligne-conversation:hover .retirer-fil, .retirer-fil:focus-visible { opacity: 1; }
+.retirer-fil:hover { background: var(--blanc-survol); }
+/* le titre s'efface sous la poubelle, rien ne bouge */
+.ligne-conversation:hover .fil .titre, .ligne-conversation:hover .fil .meta { mask-image: linear-gradient(to left, transparent var(--t-bouton), var(--texte) calc(var(--t-bouton) + var(--e-xxl))); }
+.ligne-conversation:hover .fil:not(.choisi),
 .fil:hover { background: var(--blanc-survol); }
 .fil.choisi { background: var(--blanc-actif); }
 .fil .titre { font: var(--f-label); color: var(--texte); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1386,7 +1397,8 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
   border-radius: var(--r-ligne);
   color: var(--secondaire);
 }
-.bouton-panneau:hover { background: var(--blanc-survol); color: var(--texte); }
+.bouton-panneau:hover:not(:disabled) { background: var(--blanc-survol); color: var(--texte); }
+.bouton-panneau:disabled { cursor: default; }
 
 /* l'écran : réseaux, page, plan */
 .ecran.accueil { display: flex; gap: var(--e-xl); }
@@ -1572,6 +1584,7 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 /* Data : sections, objectif, tables */
 .titre-data { display: flex; flex-direction: column; gap: var(--e-xs); padding-top: var(--e-xl); }
 .titre-data .titre { font: var(--f-grand); color: var(--texte); }
+.titre-data .titre-ligne { display: flex; align-items: center; gap: var(--e-m); }
 .titre-data .texte { font: var(--f-petit); color: var(--secondaire); }
 .pile { display: flex; flex-direction: column; gap: var(--e-xl); }
 .objectif-ligne { display: flex; align-items: baseline; gap: var(--e-m); }
@@ -1588,21 +1601,9 @@ html:has(.page-barre), .page-barre { margin: 0; overflow: hidden; }
 }
 .objectif-rythme { font: var(--f-petit); color: var(--secondaire); }
 .entete-table { font: var(--f-mini); color: var(--secondaire); }
-.table-portes .taux, .cellule-arbre .taux { font: var(--f-mini); font-variant-numeric: tabular-nums; color: var(--texte); }
-.table-portes .taux.meilleur, .cellule-arbre .taux.meilleur { font: var(--f-mini-gras); color: var(--accent); }
-.table-portes .taux.fragile, .cellule-arbre .taux.fragile { color: var(--secondaire); }
-.table-portes {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(4, auto);
-  grid-auto-rows: minmax(var(--t-ligne-table), auto);
-  align-items: center;
-  gap: var(--e-xs) var(--e-m);
-  font: var(--f-mini);
-  font-variant-numeric: tabular-nums;
-  color: var(--texte);
-  text-align: right;
-}
-.table-portes .nom, .table-portes .entete-table:first-child { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cellule-arbre .taux { font: var(--f-mini); font-variant-numeric: tabular-nums; color: var(--texte); }
+.cellule-arbre .taux.meilleur { font: var(--f-mini-gras); color: var(--accent); }
+.cellule-arbre .taux.fragile { color: var(--secondaire); }
 .table-cohortes {
   display: grid;
   grid-template-columns: auto auto repeat(4, minmax(0, 1fr));
@@ -1687,10 +1688,24 @@ button.marche.posee:hover { background: var(--blanc-actif); }
 .barre-marche { height: var(--t-arbre-barre); border-radius: var(--r-capsule); background: var(--blanc-pilule); }
 .barre-marche > i { display: block; height: 100%; width: max(calc(var(--part) * 100%), var(--t-arbre-barre)); border-radius: inherit; }
 .passage-arbre { display: flex; align-items: center; gap: var(--e-m); padding: var(--e-xs) var(--e-xl); font: var(--f-mini); font-variant-numeric: tabular-nums; color: var(--secondaire); }
-.tuiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--e-m); }
+.tuiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--e-m); }
 .tuile { display: flex; flex-direction: column; gap: var(--e-xs); padding: var(--e-m) var(--e-l); border-radius: var(--r-ligne); background: var(--blanc-ligne); min-width: 0; }
 .tuile .libelle { font: var(--f-tag); color: var(--secondaire); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tuile .valeur { font: var(--f-ligne); font-variant-numeric: tabular-nums; color: var(--texte); }
+.tuile-valeur { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-s); }
+.premier-rond { display: flex; align-items: center; gap: var(--e-xl); margin-bottom: var(--e-m); padding: var(--e-l); border-radius: var(--r-ligne); background: var(--blanc-ligne); }
+.anneau { position: relative; flex: none; width: var(--t-anneau); height: var(--t-anneau); }
+.anneau svg { display: block; width: 100%; height: 100%; }
+.anneau-centre { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--e-xs); }
+.anneau-centre .valeur { font: var(--f-grand); font-variant-numeric: tabular-nums; color: var(--texte); }
+.anneau-centre .libelle { font: var(--f-tag); color: var(--secondaire); }
+.parts-rond { flex: 1; display: flex; flex-direction: column; gap: var(--e-l); min-width: 0; }
+.part-rond { display: grid; grid-template-columns: auto minmax(0, 1fr) auto var(--t-anneau-ecart); align-items: center; gap: var(--e-m); }
+.part-rond .pastille { justify-self: end; }
+.part-noms { display: flex; flex-direction: column; gap: var(--e-xs); min-width: 0; }
+.part-noms .nom { font: var(--f-ligne); color: var(--texte); }
+.part-noms .sous { font: var(--f-mini); color: var(--secondaire); }
+.part-rond .valeur { font: var(--f-ligne); font-variant-numeric: tabular-nums; color: var(--texte); }
 
 .etapes { display: flex; flex-direction: column; gap: var(--e-xs); }
 .etape {

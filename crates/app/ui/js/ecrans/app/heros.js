@@ -1,7 +1,7 @@
 // Le héros de l'accueil : le revenu de la période, son écart, et la courbe du revenu cumulé jour par jour
 // (aire lissée, axe en euros à gauche, viseur et bulle au survol, dernier point marqué).
 
-import { h, s, pastille, enTetePanneau, couleurTon, vide, tracer, nombreJeton } from "../../composants.js";
+import { h, s, pastille, enTetePanneau, couleurTon, vide, tracer, nombreJeton, actualiser } from "../../composants.js";
 import * as F from "../../format.js";
 import { piluleMenu, lienSecondaire } from "./outils.js";
 
@@ -14,7 +14,7 @@ export function heros(ctx, heros, choisir) {
   return h(
     "section",
     { class: "panneau verre heros-panneau" },
-    enTetePanneau("Revenu", periode),
+    enTetePanneau("Revenu", periode, actualiser("revenuecat")),
     h("div", { class: "heros-valeur" }, h("span", { class: "heros" }, heros.texte), heros.delta != null && pastille(heros.delta, { couleur: couleurTon(heros.ton) })),
     h(
       "div",

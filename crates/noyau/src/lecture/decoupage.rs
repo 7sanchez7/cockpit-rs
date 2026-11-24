@@ -1,5 +1,5 @@
 //! Les réponses du tunnel Roleo dites en français, et les pas de l'arbre des installs.
-use super::data::{Filtre, LignePorte};
+use super::data::Filtre;
 use super::{format, noms};
 use crate::dimension::Dimension;
 
@@ -14,14 +14,6 @@ pub const ECRANS: [(&str, &str); 17] = [
     ("level", "Niveau"), ("social_proof", "Preuve sociale"), ("app_tour", "Présentation"),
     ("projection", "Projection"), ("account_setup", "Compte"), ("persona", "Choix du tuteur"),
     ("paywall_viewed", "Paywall vu"), ("paywall", "Essai touché"),
-];
-
-/// Les portes du paywall dans l'app.
-const NOMS_PORTES: [(&str, &str); 14] = [
-    ("round_locked", "rond verrouillé"), ("app_open", "retour dans l'app"), ("tutor_call", "appel au tuteur"),
-    ("navigation_wall", "mur de l'app"), ("account", "onglet Compte"), ("mic", "micro"), ("listen", "écoute"),
-    ("situations", "situations"), ("debates", "débats"), ("home_rounds", "ronds de l'accueil"), ("quota", "quota"),
-    ("immersion", "immersion"), ("server_refusal", "refus du serveur"), ("round_done", "rond fini"),
 ];
 
 /// Le nom de l'écran de rang `rang` (1 à 17).
@@ -39,7 +31,7 @@ pub fn libelle(d: Dimension, valeur: &str) -> String {
             Dimension::Compte => "Pas lié",
             Dimension::Produit => "Ni essai ni achat",
             Dimension::Pays => "Inconnu",
-            Dimension::Zone => "Inconnue",
+            Dimension::Zone | Dimension::Plateforme => "Inconnue",
             _ => "Sans réponse",
         }
         .into();
@@ -50,6 +42,7 @@ pub fn libelle(d: Dimension, valeur: &str) -> String {
         Dimension::Loin => ecran(valeur.parse().unwrap_or(0)).unwrap_or("Aucun écran").into(),
         Dimension::Niveau => valeur.to_uppercase(),
         Dimension::Tuteur => format::majuscule(valeur),
+        Dimension::Plateforme => valeur.into(),
         Dimension::Age => match valeur.strip_suffix("_plus") {
             Some(x) => format!("{x} ans et plus"),
             None => format!("{} ans", valeur.replace('_', "-")),
@@ -61,17 +54,6 @@ pub fn libelle(d: Dimension, valeur: &str) -> String {
 
 /// Un install y donne plusieurs réponses : ses valeurs se recoupent.
 pub fn multiple(d: Dimension) -> bool { matches!(d, Dimension::Interet | Dimension::Blocage) }
-
-impl LignePorte {
-    /// La fin du tunnel, une porte de l'app, ou rien pour les versions qui ne la disaient pas.
-    pub fn nom(&self) -> String {
-        match self.porte.as_str() {
-            "onboarding" => "fin du tunnel".into(),
-            "" => "sans porte (anciennes versions)".into(),
-            p => NOMS_PORTES.iter().find(|(c, _)| *c == p).map(|(_, n)| n.to_string()).unwrap_or_else(|| p.into()),
-        }
-    }
-}
 
 impl Filtre {
     /// Le pas tel qu'il s'affiche dans le chemin de l'arbre.

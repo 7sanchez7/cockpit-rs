@@ -275,7 +275,7 @@ pub struct SourceCadence {
 #[tauri::command]
 pub async fn reglages_collecte(etat: State<'_, Etat>) -> Rep<Collecte> {
     let sources = etat.collecteur.sources.iter()
-        .map(|s| SourceCadence { nom: s.nom(), cadence: format!("toutes les {}", format::cadence(s.cadence() as f64)) })
+        .map(|s| SourceCadence { nom: s.nom(), cadence: s.cadence().map_or(format::A_LA_MAIN.into(), |c| format!("toutes les {}", format::cadence(c as f64))) })
         .collect();
     Ok(Collecte {
         pause: etat.store.reglage(REGLAGE_PAUSE).map_err(texte)?.as_deref() == Some("1"),

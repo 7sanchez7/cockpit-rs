@@ -10,7 +10,7 @@ use crate::p;
 use serde::{Deserialize, Serialize};
 
 /// Un nœud de l'arbre des installs : ceux qui passent tous les filtres sur la période, ce qu'ils ont fait, ce que
-/// RevenueCat dit de leur paiement. Rond fini et retours ne comptent que les installs depuis `RONDS_DEPUIS`, et
+/// RevenueCat dit de leur paiement. Ronds commencés, finis et retours ne comptent que les installs depuis `RONDS_DEPUIS`, et
 /// J1, J7 les seuls jours d'install qui ont eu tout leur temps.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,8 +20,9 @@ pub struct Segment {
     pub paywall: i64,
     pub essais: i64,
     pub directs: i64,
-    /// Installs mesurables pour le rond fini, et ceux qui en ont fini un.
+    /// Installs mesurables pour les ronds, ceux qui en ont commencé un, ceux qui en ont fini un.
     pub base_rond: i64,
+    pub commences: i64,
     pub ronds: i64,
     /// Convertis que RevenueCat a vus payer : essais passés à payant et achats sans essai.
     pub payants: i64,
@@ -48,7 +49,10 @@ impl Segment {
     /// Essais que RevenueCat ne voit plus courir : payés, annulés, ou pas encore lus.
     pub fn essais_finis(&self) -> i64 { self.essais - self.en_cours }
     pub fn essai_vers_payant(&self) -> Option<f64> { Self::taux(self.essais_payes, self.essais_finis()) }
+    pub fn commence(&self) -> Option<f64> { Self::taux(self.commences, self.base_rond) }
     pub fn rond(&self) -> Option<f64> { Self::taux(self.ronds, self.base_rond) }
+    /// Ceux qui ont fini un rond, sur ceux qui en ont commencé un.
+    pub fn fin_du_rond(&self) -> Option<f64> { Self::taux(self.ronds, self.commences) }
     pub fn retour_j1(&self) -> Option<f64> { Self::taux(self.j1, self.base_j1) }
     pub fn retour_j7(&self) -> Option<f64> { Self::taux(self.j7, self.base_j7) }
 }
@@ -83,20 +87,6 @@ pub struct Build {
 
 impl Build {
     pub fn filtre(&self) -> Filtre { Filtre::Valeur(Dimension::Build, self.numero.clone()) }
-}
-
-/// Une porte du paywall sur la période.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LignePorte {
-    pub porte: String,
-    pub vues: i64,
-    pub essais: i64,
-    pub directs: i64,
-}
-
-impl LignePorte {
-    pub fn conversion(&self) -> Option<f64> { Segment::taux(self.essais + self.directs, self.vues) }
 }
 
 impl Lectures<'_> {
@@ -146,11 +136,6 @@ impl Lectures<'_> {
         Ok(rangs.iter().map(|r| l.entier(&format!("e{r}")).unwrap_or(0)).collect())
     }
 
-    /// La cohorte entière jour d'install par jour, du plus ancien au plus récent ; `valeur` y est le jour.
-    pub fn par_jour(&self, filtres: &[Filtre], debut: &str, fin: &str) -> Res<Vec<Segment>> {
-        self.agrege(filtres, "i.jour", "", "cle", debut, fin)
-    }
-
     /// Les builds des installs, le plus récent d'abord.
     pub fn builds(&self) -> Res<Vec<Build>> {
         let sql = format!("
@@ -166,12 +151,6 @@ impl Lectures<'_> {
             fin: l.texte("fin").unwrap_or_default(),
             installs: l.entier("installs").unwrap_or(0),
         }).collect())
-    }
-
-    /// Le premier jour d'install détaillé ; None avant le premier calcul.
-    pub fn premier_install(&self) -> Res<Option<String>> {
-        let sql = format!("select min(jour) as j from install where business in {}", self.dans());
-        Ok(self.q(&sql, self.ids())?.first().and_then(|l| l.texte("j")))
     }
 
     /// Une cohorte par jour d'install de `debut` à `fin` parmi ceux qui passent les filtres, mesurée depuis
@@ -202,30 +181,15 @@ impl Lectures<'_> {
                 sum(i.direct) as directs, sum(p.etat = 'paye') as payants,
                 sum(i.essai and p.etat = 'paye') as essais_payes, sum(i.essai and p.etat = 'essai') as en_cours,
                 sum((i.essai or i.direct) and coalesce(p.etat, 'inconnu') = 'inconnu') as a_verifier,
-                sum(i.jour >= ?) as base_rond, sum(i.jour >= ? and i.rond) as ronds,
+                sum(i.jour >= ?) as base_rond, sum(i.jour >= ? and i.commence) as commences,
+                sum(i.jour >= ? and i.rond) as ronds,
                 sum(i.jour between ? and ?) as base_j1, sum(i.jour between ? and ? and i.j1) as j1,
                 sum(i.jour between ? and ?) as base_j7, sum(i.jour between ? and ? and i.j7) as j7
             from install i left join paiement p on p.business = i.business and p.client = i.client {jointure}
             where i.business in {} and i.jour between ? and ?{clauses}
             group by cle order by {ordre}", self.dans());
-        let avant = p![r, r, r, &c1, r, &c1, r, &c7, r, &c7];
+        let avant = p![r, r, r, r, &c1, r, &c1, r, &c7, r, &c7];
         Ok(self.q(&sql, self.autour(avant, [p![debut, fin], valeurs].concat()))?.iter().map(segment).collect())
-    }
-
-    // portes
-
-    /// Les portes du paywall sur la période, la plus vue d'abord.
-    pub fn portes(&self, debut: &str, fin: &str) -> Res<Vec<LignePorte>> {
-        let sql = format!("
-            select porte, sum(vues) as vues, sum(essais) as essais, sum(directs) as directs
-            from porte where jour between ? and ? and business in {}
-            group by porte order by vues desc, essais + directs desc", self.dans());
-        Ok(self.q(&sql, self.autour(p![debut, fin], p![]))?.iter().map(|l| LignePorte {
-            porte: l.texte("porte").unwrap_or_default(),
-            vues: l.entier("vues").unwrap_or(0),
-            essais: l.entier("essais").unwrap_or(0),
-            directs: l.entier("directs").unwrap_or(0),
-        }).collect())
     }
 }
 
@@ -234,14 +198,14 @@ fn segment(l: &Ligne) -> Segment {
     Segment {
         valeur: l.texte("cle").unwrap_or_default(),
         installs: n("installs"), paywall: n("paywall"), essais: n("essais"), directs: n("directs"),
-        base_rond: n("base_rond"), ronds: n("ronds"), payants: n("payants"), essais_payes: n("essais_payes"),
+        base_rond: n("base_rond"), commences: n("commences"), ronds: n("ronds"), payants: n("payants"), essais_payes: n("essais_payes"),
         en_cours: n("en_cours"), a_verifier: n("a_verifier"), base_j1: n("base_j1"), j1: n("j1"),
         base_j7: n("base_j7"), j7: n("j7"),
     }
 }
 
 /// Les filtres en SQL, chacun précédé de `and`, et leurs paramètres.
-fn clauses(filtres: &[Filtre]) -> (String, Vec<Valeur>) {
+pub(super) fn clauses(filtres: &[Filtre]) -> (String, Vec<Valeur>) {
     let (mut sql, mut valeurs) = (String::new(), vec![]);
     for f in filtres {
         match f {

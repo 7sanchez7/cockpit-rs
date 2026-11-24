@@ -27,8 +27,8 @@ fn valeur(store: &Store, metrique: &str, jour: &str, heure: i64) -> Option<f64> 
 
 fn v(store: &Store, metrique: &str, jour: &str) -> Option<f64> { valeur(store, metrique, jour, -1) }
 
-/// Une ligne de la requête par install ; `drapeaux` dans l'ordre paywall, essai, direct, rond, j1, j7, j14, j30.
-fn install(jour: &str, loin: i64, drapeaux: [i64; 8], client: &str, valeurs: &[(Dimension, &str)]) -> String {
+/// Une ligne de la requête par install ; `drapeaux` : paywall, essai, direct, commence, rond, j1, j7, j14, j30.
+fn install(jour: &str, loin: i64, drapeaux: [i64; 9], client: &str, valeurs: &[(Dimension, &str)]) -> String {
     let v: Vec<String> = Dimension::lues()
         .map(|d| {
             let x = if d == Dimension::Loin {
@@ -40,27 +40,29 @@ fn install(jour: &str, loin: i64, drapeaux: [i64; 8], client: &str, valeurs: &[(
         })
         .collect();
     let d: Vec<String> = drapeaux.iter().map(i64::to_string).collect();
-    format!("[\"{jour}\", {loin}, {}, \"{client}\", {}]", d.join(", "), v.join(", "))
+    // un rond fini vaut 2 commencés, 3 finis sur 2 jours, le premier 90 s après l'install
+    let ronds = if drapeaux[4] == 1 { r#"2, 3, 2, 90, "2026-11-10""# } else { r#"0, 0, 0, -1, """# };
+    format!("[\"{jour}\", {loin}, {}, \"{client}\", \"p-{client}\", {ronds}, {}]", d.join(", "), v.join(", "))
 }
 
 fn lecture() -> LecturePostHog {
     use Dimension::{Age, Build, Interet, Pays, Source, Version};
     let installs = [
-        install("2026-11-03", 17, [1, 1, 0, 1, 1, 1, 0, 0], "c1",
+        install("2026-11-03", 17, [1, 1, 0, 1, 1, 1, 1, 0, 0], "c1",
                 &[(Age, "18_24"), (Source, "tiktok"), (Interet, "music, films"), (Pays, "FR"), (Version, "2.0.2"), (Build, "43")]),
-        install("2026-11-03", 16, [1, 0, 1, 1, 0, 0, 0, 0], "c2",
+        install("2026-11-03", 16, [1, 0, 1, 1, 1, 0, 0, 0, 0], "c2",
                 &[(Age, "25_34"), (Source, "tiktok"), (Interet, "music"), (Pays, "FR"), (Version, "2.0.2"), (Build, "43")]),
-        install("2026-11-05", 17, [1, 1, 0, 0, 0, 0, 0, 0], "c3",
+        install("2026-11-05", 17, [1, 1, 0, 1, 0, 0, 0, 0, 0], "c3",
                 &[(Age, "18_24"), (Source, "instagram"), (Pays, "ES"), (Version, "2.0.2"), (Build, "43")]),
-        install("2026-11-12", 6, [0; 8], "", &[(Age, "18_24"), (Source, "tiktok"), (Version, "2.0.3"), (Build, "9")]),
-        install("2026-11-12", 0, [0; 8], "", &[]),
+        install("2026-11-12", 6, [0; 9], "", &[(Age, "18_24"), (Source, "tiktok"), (Version, "2.0.3"), (Build, "9")]),
+        install("2026-11-12", 0, [0; 9], "", &[]),
     ];
     LecturePostHog {
         // le total, puis App Store, puis Play Store
         series: decodage::series(
-            &l(r#"[["2026-11-06", 327, 160, 8, 4, 20, 10, 300, 150, 7, 4, 18, 9, 20, 8, 1, 0, 2, 1],
-                   ["2026-11-12", 490, 490, 6, 6, 300, 300, 470, 470, 6, 6, 290, 290, 15, 15, 0, 0, 10, 10],
-                   ["2026-11-13", 230, 230, 3, 3, 100, 100, 220, 220, 2, 2, 95, 95, 9, 9, 1, 1, 5, 5]]"#),
+            &l(r#"[["2026-11-06", 327, 160, 8, 4, 20, 10, 30, 14, 300, 150, 7, 4, 18, 9, 27, 13, 20, 8, 1, 0, 2, 1, 3, 1],
+                   ["2026-11-12", 490, 490, 6, 6, 300, 300, 400, 400, 470, 470, 6, 6, 290, 290, 385, 385, 15, 15, 0, 0, 10, 10, 15, 15],
+                   ["2026-11-13", 230, 230, 3, 3, 100, 100, 131, 131, 220, 220, 2, 2, 95, 95, 125, 125, 9, 9, 1, 1, 5, 5, 6, 6]]"#),
             &l(r#"[["2026-11-06", 115, 40, 110, 38, 5, 2], ["2026-11-13", 51, 51, 47, 47, 4, 4]]"#),
         )
         .unwrap(),
@@ -104,6 +106,8 @@ fn series_et_leur_j7() {
     assert_eq!(v(&s, metrique::INSTALLS_J7, "2026-11-13"), Some(40.0));
     assert_eq!(v(&s, metrique::RONDS, "2026-11-13"), Some(100.0));
     assert_eq!(v(&s, metrique::RONDS_J7, "2026-11-13"), Some(10.0));
+    assert_eq!(v(&s, metrique::RONDS_COMMENCES, "2026-11-13"), Some(131.0));
+    assert_eq!(v(&s, metrique::RONDS_COMMENCES_J7, "2026-11-13"), Some(14.0));
     // jour sans ligne : zéro, pas de trou
     assert_eq!(v(&s, metrique::INSTALLS, "2026-11-12"), Some(0.0));
     assert_eq!(v(&s, metrique::ACTIFS_J7, "2026-11-12"), Some(0.0));
@@ -120,6 +124,8 @@ fn series_par_store() {
     assert_eq!(v(&s, &play.metrique(metrique::INSTALLS), "2026-11-13"), Some(4.0));
     assert_eq!(v(&s, &play.metrique(metrique::INSTALLS_J7), "2026-11-13"), Some(2.0));
     assert_eq!(v(&s, &play.metrique(metrique::RONDS_J7), "2026-11-13"), Some(1.0));
+    assert_eq!(v(&s, &play.metrique(metrique::RONDS_COMMENCES), "2026-11-13"), Some(6.0));
+    assert_eq!(v(&s, &play.metrique(metrique::RONDS_COMMENCES_J7), "2026-11-13"), Some(1.0));
     assert_eq!(v(&s, &app.metrique(metrique::INSTALLS), "2026-11-13"), Some(47.0));
     assert_eq!(v(&s, &app.metrique(metrique::RONDS), "2026-11-12"), Some(290.0));
     // un store sans ligne : zéro
@@ -133,6 +139,7 @@ fn requetes_par_segment() {
     let jours = requete_jours(&e, 0, 1);
     assert!(jours.contains("uniqExactIf(person_id, true)"));
     assert!(jours.contains("countIf(event = 'trial_started' and properties.$os = 'Android' and timestamp < fromUnixTimestamp(1))"));
+    assert!(jours.contains("countIf(event = 'path_round_started' and properties.$os = 'Android')"));
     let installs = requete_installs(&e, 0, 1);
     assert!(installs.contains("countIf(os in ('iOS', 'iPadOS')), countIf(os in ('iOS', 'iPadOS') and f < fromUnixTimestamp(1))"));
     assert!(installs.contains("where os in ('iOS', 'iPadOS', 'Android')"));
@@ -145,6 +152,10 @@ fn requetes_sur_les_evenements_du_business() {
     let par_install = requete_par_install(&e, 0);
     assert!(par_install.contains("minIf(timestamp, event = 'signup')") && par_install.contains("countIf(event = 'trial') > 0 as essai"));
     assert!(!par_install.contains("onboarding_started") && !par_install.contains("trial_started"));
+    // un rond fini compte comme commencé, même si son début n'est pas arrivé
+    assert!(par_install.contains("(countIf(event = 'path_round_started') > 0 or rond) as commence"));
+    assert!(par_install.contains("argMin(properties.$os, timestamp) in ('iOS', 'iPadOS', 'Android')"));
+    assert!(par_install.contains("argMinIf(toString(properties.$os), timestamp, event in ('signup'))"));
 }
 
 #[test]
@@ -186,9 +197,9 @@ fn fil_des_essais() {
 fn lignes_ecrites_et_fil_sans_doublon() {
     let s = essai::store();
     let l = lecture();
-    // 2 jours × 8 séries × 3 segments, 15 heures × 3 segments, 3 essais, 5 installs, 2 portes
-    assert_eq!(ecrire_l(&s, &l), 48 + 45 + 3 + 7);
-    assert_eq!(ecrire_l(&s, &l), 48 + 45 + 7);
+    // 2 jours × 10 séries × 3 segments, 15 heures × 3 segments, 3 essais, 5 installs, 2 portes
+    assert_eq!(ecrire_l(&s, &l), 60 + 45 + 3 + 7);
+    assert_eq!(ecrire_l(&s, &l), 60 + 45 + 7);
     assert_eq!(s.db.query("select 1 from install", p![]).unwrap().len(), 5);
 }
 
@@ -197,10 +208,39 @@ fn installs_decodes() {
     let i = lecture().horaire.unwrap().installs;
     assert_eq!(i.len(), 5);
     assert!(i[0].loin == 17 && i[0].paywall && i[0].essai && !i[0].direct && i[0].j7 && !i[0].j14);
+    assert!(i[0].commence && i[0].rond && i[2].commence && !i[2].rond && !i[3].commence);
     assert_eq!(i[0].client.as_deref(), Some("c1"));
     assert_eq!(i[0].valeurs[&Dimension::Interet], ["music", "films"]);
     assert_eq!(i[0].valeurs[&Dimension::Loin], ["17"]);
     assert_eq!(i[0].valeurs[&Dimension::Zone], ["europe"]);
     assert_eq!(i[4].client, None);
     assert_eq!(i[4].valeurs, [(Dimension::Loin, vec!["0".to_string()])].into_iter().collect());
+    assert!(i[0].personne == "p-c1" && i[0].commences == 2 && i[0].ronds == 3 && i[0].jours_ronds == 2);
+    assert_eq!((i[0].premier_rond, i[0].dernier_rond.as_deref()), (Some(90), Some("2026-11-10")));
+    assert_eq!((i[2].premier_rond, i[2].dernier_rond.as_deref()), (None, None));
+}
+
+#[test]
+fn evenements_un_par_un() {
+    let lignes = l(r#"[
+        ["u1", "p1", 1795193682, 1795193699259, "path_reply", "iOS", "49", "2026-11-20",
+            [["said", "1"], ["judged", "\"juste\""], ["voice", "true"]]],
+        ["u2", "p1", 1795193690, 1795193699301, "path_round_done", "", "", "2026-11-20", []]
+    ]"#);
+    let e = decodage::evenements(&lignes).unwrap();
+    assert_eq!((e[0].at.as_str(), e[0].jour.as_str(), e[0].recu_ms), ("2026-11-20T16:54:42Z", "2026-11-20", 1795193699259));
+    assert_eq!(e[0].props, r#"{"said":1,"judged":"juste","voice":true}"#);
+    assert_eq!((e[1].plateforme.as_str(), e[1].props.as_str()), ("", "{}"));
+
+    let s = essai::store();
+    s.evenements_app("roleo", &e).unwrap();
+    s.evenements_app("roleo", &e[..1]).unwrap();
+    let r = s.db.query("select json_extract(props, '$.said') as said from evenement where nom = 'path_reply'", p![]).unwrap();
+    assert_eq!((r.len(), r[0].nombre("said")), (1, Some(1.0)));
+    assert_eq!(s.db.query("select 1 from evenement", p![]).unwrap().len(), 2);
+
+    let q = requete_evenements(&Evenements::default(), 1_795_193_699_259);
+    assert!(q.contains("created_at >= fromUnixTimestamp64Milli(1795193699259)"));
+    assert!(q.contains(&format!("timestamp >= fromUnixTimestamp({})", 1_795_193_699 - 30 * 86_400)));
+    assert!(q.contains("'path_reply'") && q.contains(&format!("limit {PAGE_EVENEMENTS}")));
 }

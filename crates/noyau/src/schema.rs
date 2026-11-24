@@ -2,7 +2,7 @@
 //! Pas de migrations : `create … if not exists`, une colonne nouvelle s'ajoute par `COLONNES`, avec une valeur par défaut.
 
 /// Colonnes ajoutées après coup à une table existante : (table, colonne, définition).
-pub const COLONNES: [(&str, &str, &str); 6] = [
+pub const COLONNES: [(&str, &str, &str); 13] = [
     ("video", "plateforme", "text not null default 'tiktok'"),
     // le classement de la veille (docs/donnees.md § Veille) ; `classee` vide = à classer
     ("veille_video", "app", "text"),
@@ -11,6 +11,15 @@ pub const COLONNES: [(&str, &str, &str); 6] = [
     ("veille_video", "classee", "text"),
     // la conversation d'une demande à Claude : l'id de sa première demande
     ("veille_demande", "fil", "text"),
+    // rond commencé, recalculé au prochain passage horaire de PostHog
+    ("install", "commence", "integer not null default 0"),
+    // le détail des ronds de chaque install, idem
+    ("install", "personne", "text"),
+    ("install", "commences", "integer not null default 0"),
+    ("install", "ronds", "integer not null default 0"),
+    ("install", "jours_ronds", "integer not null default 0"),
+    ("install", "premier_rond", "integer"),
+    ("install", "dernier_rond", "text"),
 ];
 
 pub const SQL: &str = r#"
@@ -81,6 +90,12 @@ create table if not exists porte (
     business text not null, jour text not null, porte text not null,
     vues integer not null, essais integer not null, directs integer not null,
     primary key (business, jour, porte));
+create table if not exists evenement (
+    business text not null, uuid text not null, personne text not null, at text not null, jour text not null,
+    nom text not null, plateforme text not null, build text not null, props text not null,
+    primary key (business, uuid));
+create index if not exists evenement_nom on evenement (business, nom, jour);
+create index if not exists evenement_personne on evenement (business, personne, at);
 -- remplacées par install, paiement et porte
 drop table if exists cohorte;
 drop table if exists entonnoir;

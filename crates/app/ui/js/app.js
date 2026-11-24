@@ -22,7 +22,7 @@
 //   abonner(fn) -> arrêt     fn(ctx) remplace le re-rendu complet tant que l'écran est affiché
 
 import { appeler, ecouter, lien, image, fichier, fenetre, toast } from "./pont.js";
-import { h, remplacer, icone, marque, avatar, point, surtitre, segmente, glisseur, entree, rendu, sobre, jeton, nombreJeton } from "./composants.js";
+import { h, remplacer, icone, marque, avatar, point, surtitre, segmente, glisseur, entree, rendu, sobre, jeton, nombreJeton, suivreCollecte } from "./composants.js";
 import * as F from "./format.js";
 import { ouvrirPalette } from "./palette.js";
 
@@ -161,6 +161,7 @@ function majBarre() {
   );
 
   const tourne = f.enCours.length > 0;
+  suivreCollecte(f.sources, f.enCours);
   barre.actualiser.classList.toggle("tourne", tourne);
   barre.actualiser.title = tourne ? "Collecte en cours" : `Tout relancer (${raccourci("R")})`;
 }

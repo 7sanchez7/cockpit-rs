@@ -325,6 +325,19 @@ pub async fn demander_veille(etat: State<'_, Etat>, business: String, prompt: St
     Ok(fil)
 }
 
+/// Efface une conversation avec Claude, sauf pendant qu'il y cherche.
+#[tauri::command]
+pub async fn supprimer_fil_veille(etat: State<'_, Etat>, fil: String) -> Rep<()> {
+    let menee = etat.collecteur.en_cours().contains(ID);
+    let fils = lectures(&etat.store, None)?.fils_veille().map_err(texte)?;
+    if fils.iter().any(|f| f.id == fil && etat_demande(&f.etat, menee) == DemandeVeille::EN_COURS) {
+        return Err("Claude cherche encore dans cette conversation.".into());
+    }
+    etat.store.supprimer_fil(&fil).map_err(texte)?;
+    etat.store.a_change();
+    Ok(())
+}
+
 /// Une demande en cours que plus rien ne mène (app quittée en route) se lit échouée.
 fn etat_demande(etat: &str, menee: bool) -> &'static str {
     match etat {
@@ -367,7 +380,7 @@ pub async fn regler_videos(etat: State<'_, Etat>, nombre: i64) -> Rep<()> {
     Ok(())
 }
 
-/// Ajoute un mot-clé ; la veille le cherche aussitôt.
+/// Ajoute un mot-clé ; la veille le cherche au prochain lancement.
 #[tauri::command]
 pub async fn ajouter_mot(etat: State<'_, Etat>, business: String, mot: String, vues_min: i64) -> Rep<()> {
     let mot = mot.trim();
@@ -376,7 +389,6 @@ pub async fn ajouter_mot(etat: State<'_, Etat>, business: String, mot: String, v
     }
     etat.store.ajouter_mot(&business, mot, vues_min.max(0)).map_err(texte)?;
     etat.store.a_change();
-    etat.collecteur.relancer(Some("veille"));
     Ok(())
 }
 

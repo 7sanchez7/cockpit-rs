@@ -1,7 +1,7 @@
 // Vidéos : les comptes suivis et leurs vidéos, la grille ou le tableau, et le détail de la vidéo choisie.
 // Tout se lit par la commande `videos` (src/ecrans/videos.rs) ; ce module n'affiche que ce qu'elle rend.
 
-import { barres, bloc, chiffre, couleurTon, courbe, enTetePanneau, h, logoPlateforme, miniature, pastille, rangee, rendu, segmente, sparkline, vide } from "../composants.js";
+import { actualiser, barres, bloc, chiffre, couleurTon, courbe, enTetePanneau, h, logoPlateforme, miniature, pastille, rangee, rendu, RESEAUX, segmente, sparkline, vide } from "../composants.js";
 import * as F from "../format.js";
 import { bouton, caseVideo, choixBusiness, menuContextuel, popover, remplacer } from "./videos/commun.js";
 
@@ -152,7 +152,7 @@ function panneauVideos(d) {
   return h(
     "section",
     { class: "panneau-videos verre" },
-    h("div", { class: "marge" }, enTetePanneau("Toutes les vidéos", segmente(TRIS, etat.tri, (id) => maj({ tri: id })))),
+    h("div", { class: "marge" }, enTetePanneau("Toutes les vidéos", segmente(TRIS, etat.tri, (id) => maj({ tri: id })), actualiser(...RESEAUX, "contenu"))),
     h(
       "div",
       { class: "marge filtres" },
@@ -230,13 +230,14 @@ function parts(p) {
 
 function detail(d, ctx) {
   const v = d.detail;
-  if (!v) return bloc(enTetePanneau("Détail"), vide(d.sansCompte ? "Suivre un compte avec la carte +." : "Aucune vidéo relevée pour ce filtre."));
+  if (!v) return bloc(enTetePanneau("Détail", actualiser(...RESEAUX)), vide(d.sansCompte ? "Suivre un compte avec la carte +." : "Aucune vidéo relevée pour ce filtre."));
   const levier = couleurTon(v.percee.ton);
   return bloc(
     enTetePanneau(
       "Détail",
       v.verdict.couleur ? pastille(v.verdict.texte, { couleur: couleur(v.verdict.couleur) }) : h("span", { class: "sans-fiche" }, v.verdict.texte),
       v.seuil && pastille(v.seuil.texte, { couleur: couleur(v.seuil.couleur) }),
+      actualiser(v.plateforme),
     ),
     h(
       "div",

@@ -24,6 +24,10 @@ use std::time::Duration as Delai;
 pub const MOTS_PAR_PASSAGE: usize = 4;
 /// Les profils visités pour leur médiane, par plateforme et par passage.
 pub const COMPTES_PAR_PASSAGE: i64 = 8;
+/// Les comptes qui ont une vidéo sans vues, relus d'un coup avec un fournisseur (ni page ni pause), en plus des autres.
+const COMPTES_RATTRAPAGE: i64 = 64;
+/// Les vidéos lues sur le profil d'un compte qui a une vidéo sans vues : 8 pages de 12 reels chez LurkAPI.
+const VIDEOS_RATTRAPAGE: usize = 96;
 /// Les analyses Claude par passage, les plus récentes d'abord : 40 par jour au plus.
 pub const ANALYSES_PAR_PASSAGE: usize = 10;
 /// Le curseur de l'écran Veille : les vidéos gardées par mot-clé et par plateforme, les plus récentes d'abord.
@@ -52,8 +56,8 @@ pub struct Veille;
 impl Source for Veille {
     fn id(&self) -> &'static str { ID }
     fn nom(&self) -> &'static str { "Veille" }
-    fn cadence(&self) -> i64 { 6 * 3_600 }
-    fn reprise(&self) -> i64 { 3 * 3_600 }
+    // chaque passage coûte des crédits LurkAPI : seulement sur « Lancer la veille »
+    fn cadence(&self) -> Option<i64> { None }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let store = &ctx.store;
@@ -168,10 +172,12 @@ async fn chercher_mots(ctx: &Contexte, p: Plateforme, a_chercher: &[MotVeille], 
     }
 }
 
-/// Les médianes des comptes à relire. Avec un fournisseur, l'API suffit. Sinon, Instagram lit la page Reels du profil
-/// dans une page cachée : sans session, rien à faire, et rien à dire.
+/// Les médianes des comptes à relire. Avec un fournisseur, l'API suffit, et les comptes qui ont une vidéo sans vues
+/// passent tous en plus des `COMPTES_PAR_PASSAGE`. Sinon, Instagram lit la page Reels du profil dans une page cachée :
+/// sans session, rien à faire, et rien à dire.
 async fn baser_comptes(ctx: &Contexte, p: Plateforme, fournisseurs: &Fournisseurs, maintenant: &Date, b: &mut Bilan) {
-    let comptes = match ctx.store.comptes_a_baser(p, COMPTES_PAR_PASSAGE, maintenant) {
+    let limite = if fournisseurs.configure() { COMPTES_RATTRAPAGE } else { COMPTES_PAR_PASSAGE };
+    let comptes = match ctx.store.comptes_a_baser(p, limite, maintenant) {
         Ok(c) => c,
         Err(e) => {
             b.echecs.push(format!("{} comptes : {e}", p.nom()));
@@ -181,6 +187,9 @@ async fn baser_comptes(ctx: &Contexte, p: Plateforme, fournisseurs: &Fournisseur
     if comptes.is_empty() {
         return;
     }
+    // ceux aux vidéos sans vues viennent d'abord
+    let rattrapes = comptes.iter().filter(|(_, sans_vues)| *sans_vues).count();
+    let comptes = comptes.into_iter().take(rattrapes + COMPTES_PAR_PASSAGE as usize);
     let nav = if !fournisseurs.configure() && p == Plateforme::Instagram {
         match ouvrir(ctx, p).await {
             Ok(n) => Some(n),
@@ -194,14 +203,18 @@ async fn baser_comptes(ctx: &Contexte, p: Plateforme, fournisseurs: &Fournisseur
         None
     };
     let mut de_suite = 0;
-    for handle in comptes {
-        match baser(ctx, p, &handle, fournisseurs, nav.as_deref(), maintenant).await {
+    for (handle, sans_vues) in comptes {
+        match baser(ctx, p, &handle, sans_vues, fournisseurs, nav.as_deref(), maintenant).await {
             Ok(()) => {
                 b.lignes += 1;
                 de_suite = 0;
             }
             Err(e) => {
                 b.echecs.push(format!("{} @{handle} : {e}", p.nom()));
+                // plus de crédits chez le fournisseur : les suivants échoueraient tous
+                if matches!(e, Erreur::Http(402, _)) {
+                    break;
+                }
                 de_suite += 1;
             }
         }
@@ -243,13 +256,15 @@ async fn chercher(ctx: &Contexte, p: Plateforme, m: &MotVeille, voulues: i64, fo
     Ok(gardees)
 }
 
-/// La médiane d'un compte relue sur son profil, et le relevé de ses vidéos déjà en base.
-async fn baser(ctx: &Contexte, p: Plateforme, handle: &str, fournisseurs: &Fournisseurs, nav: Option<&dyn Navigateur>, maintenant: &Date) -> Res<()> {
+/// La médiane d'un compte relue sur son profil, et le relevé de ses vidéos déjà en base. Un compte qui a une vidéo sans
+/// vues (trouvée par une recherche qui ne les donne pas) est lu plus loin, `VIDEOS_RATTRAPAGE`, pour la retrouver.
+async fn baser(ctx: &Contexte, p: Plateforme, handle: &str, sans_vues: bool, fournisseurs: &Fournisseurs, nav: Option<&dyn Navigateur>, maintenant: &Date) -> Res<()> {
     // sans fournisseur, Instagram passe par la page ; yt-dlp ne passe par aucune page
     if nav.is_some() {
         pause(nav).await;
     }
-    let siennes = dernieres(ctx, p, handle, fournisseurs, nav, maintenant).await?;
+    let n = if sans_vues { VIDEOS_RATTRAPAGE } else { ScoreVeille::VIDEOS_BASE };
+    let siennes = dernieres(ctx, p, handle, n, fournisseurs, nav, maintenant).await?;
     if siennes.is_empty() {
         return Err(format_err("aucune vidéo sur le profil"));
     }
@@ -295,9 +310,9 @@ pub fn recherche(mot: &str) -> String { format!("https://www.tiktok.com/search/v
 /// Les dernières vidéos d'un compte, pour sa médiane. Avec un fournisseur, l'API. Sinon : TikTok par `yt-dlp` (sa page
 /// de profil ne rend pas la liste à une page cachée) ; Instagram, sa page Reels dans la page cachée (`clips_connection`,
 /// 12 reels avec leurs vues). `web_profile_info` répond 404 depuis le 18 nov. 2026, même à la page.
-pub async fn dernieres(ctx: &Contexte, p: Plateforme, handle: &str, fournisseurs: &Fournisseurs, nav: Option<&dyn Navigateur>, maintenant: &Date) -> Res<Vec<Trouvaille>> {
+pub async fn dernieres(ctx: &Contexte, p: Plateforme, handle: &str, n: usize, fournisseurs: &Fournisseurs, nav: Option<&dyn Navigateur>, maintenant: &Date) -> Res<Vec<Trouvaille>> {
     if fournisseurs.configure() {
-        return Ok(parseurs::trouvailles_objets(p, &fournisseurs.dernieres(&ctx.http, p, handle, 20).await?));
+        return Ok(parseurs::trouvailles_objets(p, &fournisseurs.dernieres(&ctx.http, p, handle, n).await?));
     }
     match p {
         Plateforme::Instagram => {
@@ -308,7 +323,7 @@ pub async fn dernieres(ctx: &Contexte, p: Plateforme, handle: &str, fournisseurs
             Ok(parseurs::trouvailles(p, &corps).into_iter().filter(|t| t.compte.to_lowercase() == handle).collect())
         }
         _ => {
-            let l = ytdlp::lire_liste(&ytdlp::liste(&p.profil(handle), Some(20)).await?, p, "", handle, maintenant)?;
+            let l = ytdlp::lire_liste(&ytdlp::liste(&p.profil(handle), Some(n)).await?, p, "", handle, maintenant)?;
             Ok(parseurs::trouvailles_liste(&l, p, handle, l.abonnes))
         }
     }
@@ -455,7 +470,7 @@ mod tests {
         assert!(ScoreVeille::percee(v, &(t0() + Duration::hours(2))));
         assert_eq!(percee(v), "@profe.ana · 100\u{a0}k vues, 10× sa médiane · « espagnol »");
         assert!(store.comptes_a_baser(Plateforme::Tiktok, 8, &t0()).unwrap().is_empty());
-        assert_eq!(store.comptes_a_baser(Plateforme::Tiktok, 8, &(t0() + Duration::days(8))).unwrap(), ["profe.ana"]);
+        assert_eq!(store.comptes_a_baser(Plateforme::Tiktok, 8, &(t0() + Duration::days(8))).unwrap(), [("profe.ana".to_string(), false)]);
 
         let a = analyse::tests::analyse();
         store.analyse_veille(&v.id, &t0(), analyse::HAIKU.modele, &a).unwrap();
@@ -464,6 +479,19 @@ mod tests {
             store.cout_veille(&v.id, &t0(), analyse::HAIKU.modele, 4_000, 800, 0.0008).unwrap();
         }
         assert!((store.depense_veille_usd().unwrap() - 0.0016).abs() < 1e-9);
+    }
+
+    #[test]
+    fn comptes_sans_vues_d_abord() {
+        let store = Store::memoire().unwrap();
+        let mut gros = Trouvaille::nouvelle(Plateforme::Instagram, "GROS1234", "gros");
+        gros.vues = Some(1_000_000);
+        let mut muet = Trouvaille::nouvelle(Plateforme::Instagram, "MUET1234", "muet");
+        muet.likes = Some(5_000);
+        for t in [&gros, &muet] {
+            store.trouvaille(t, "roleo", None, &t0()).unwrap();
+        }
+        assert_eq!(store.comptes_a_baser(Plateforme::Instagram, 8, &t0()).unwrap(), [("muet".to_string(), true), ("gros".to_string(), false)]);
     }
 
     #[test]

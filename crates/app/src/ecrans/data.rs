@@ -1,6 +1,6 @@
-//! Les commandes de l'écran data : toute la data de l'app sur la période (l'argent, l'acquisition, la conversion,
-//! la rétention, l'usage), ou les installs d'un build comparés au build d'avant ; l'arbre des installs à part, pour
-//! qu'un clic dans l'arbre ne relise que lui.
+//! Les commandes de l'écran data : l'argent et toute la data de l'app sur la période (rétention, le rond, le bilan),
+//! ou les installs d'un build comparés au build d'avant ; l'arbre des installs à part, pour qu'un clic dans l'arbre ne
+//! relise que lui.
 use super::accueil::{ton, Carte};
 use crate::commandes::{texte, Rep};
 use crate::Etat;
@@ -11,6 +11,7 @@ use noyau::lecture::data::{Build, Filtre, Segment};
 use noyau::lecture::decoupage::{self, ECRANS, RONDS_DEPUIS};
 use noyau::lecture::fenetre::{Chiffres, Cumul, Fenetre, Periode};
 use noyau::lecture::format::{self as fmt, VIDE};
+use noyau::lecture::rond::{JourRonds, ParJour, PremiersRonds};
 use noyau::lecture::Lectures;
 use noyau::metrique::{self as m, en_euros, EUR_PAR_USD};
 use noyau::modeles::{Cohorte, Evenement, TypeFil};
@@ -18,9 +19,9 @@ use noyau::Res;
 use serde::Serialize;
 use tauri::State;
 
-/// L'ordre des découpages : où ils s'arrêtent, ce qui se vend, d'où ils viennent, puis qui ils sont.
-const DIMENSIONS: [Dimension; 16] = [
-    Loin, Produit, Source, Age, Motivation, Blocage, Niveau, Langue, Maternelle, Zone, Pays, Interet, Notifs, Compte,
+/// L'ordre des découpages : où ils s'arrêtent, ce qui se vend, sur quel téléphone, d'où ils viennent, puis qui ils sont.
+const DIMENSIONS: [Dimension; 17] = [
+    Loin, Produit, Plateforme, Source, Age, Motivation, Blocage, Niveau, Langue, Maternelle, Zone, Pays, Interet, Notifs, Compte,
     Tuteur, Build,
 ];
 
@@ -37,11 +38,11 @@ pub struct VueData {
     builds: Vec<ChoixBuild>,
     build: Option<String>,
     argent: Option<Argent>,
-    acquisition: Option<Section>,
-    conversion: Conversion,
     arbre: Arbre,
     retention: Retention,
-    usage: Option<Section>,
+    /// None tant que les événements manquent.
+    rond: Option<Section>,
+    bilan: Option<Section>,
 }
 
 #[derive(Serialize)]
@@ -109,24 +110,6 @@ struct BarresAchats {
 struct Ventes {
     compte: String,
     evenements: Vec<Evenement>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Conversion {
-    section: Section,
-    /// Seulement sur une période : les portes ne se découpent pas par build.
-    portes: Option<Vec<Porte>>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Porte {
-    nom: String,
-    vues: String,
-    essais: String,
-    directs: String,
-    conversion: Taux,
 }
 
 /// Un taux : blanc et gras s'il est le meilleur de sa colonne, gris si sa base est trop petite.
@@ -232,32 +215,29 @@ fn vue(l: &Lectures, periode: Periode, build: Option<String>) -> Res<VueData> {
         }).collect(),
         build: choisi.map(|b| b.numero.clone()),
         argent: None,
-        acquisition: None,
-        conversion: Conversion { section: Section { titre: "Conversion", texte: String::new(), kpis: vec![] }, portes: None },
         arbre: Arbre { texte: TEXTE_ARBRE, debut: f.debut(), fin: f.fin(), racine: vec![] },
         retention: Retention { section: Section { titre: "Rétention", texte: String::new(), kpis: vec![] },
                                sous_titre: sous_titre_cohortes(), cohortes: vec![] },
-        usage: None,
+        rond: None,
+        bilan: None,
     };
     Ok(match choisi {
         Some(b) => VueData {
-            conversion: conversion_build(l, b, avant)?,
             arbre: Arbre { texte: TEXTE_ARBRE, debut: b.debut.clone(), fin: b.fin.clone(), racine: vec![b.filtre()] },
             retention: retention_build(l, b, avant)?,
             ..base
         },
         None => VueData {
             argent: Some(argent(l, &f)?),
-            acquisition: Some(acquisition(l, &f)?),
-            conversion: conversion(l, &f)?,
             retention: retention(l, &f)?,
-            usage: Some(usage(l, &f)?),
+            rond: rond(l, &f)?,
+            bilan: bilan(l, &f)?,
             ..base
         },
     })
 }
 
-const TEXTE_ARBRE: &str = "Clique une marche, un écran du tunnel ou une valeur pour descendre ; le chemin du haut remonte. Chaque nœud dit combien de ses installs prennent l'essai et paient, et l'écart en points avec le nœud du dessus.";
+const TEXTE_ARBRE: &str = "Clique une marche, un écran du tunnel ou une valeur pour descendre ; le chemin du haut remonte. Chaque nœud dit combien de ses installs prennent l'essai, paient, commencent et finissent un rond, et l'écart avec le nœud du dessus.";
 
 /// « Build 49 (2.0.3), 919 installs du 8 au 14 nov., comparé au build 43 ».
 fn sous_titre(b: &Build, avant: Option<&Build>) -> String {
@@ -332,94 +312,6 @@ fn argent(l: &Lectures, f: &Fenetre) -> Res<Argent> {
         },
         ventes: Ventes { compte: format!("{} dans le fil", ventes.len()), evenements: ventes },
     })
-}
-
-fn acquisition(l: &Lectures, f: &Fenetre) -> Res<Section> {
-    Ok(Section {
-        titre: "Acquisition",
-        texte: "Téléchargements : comptés par le store, app ouverte ou non, avec un à trois jours de retard. Installs : premier lancement vu par PostHog. Nouveaux clients : premier lancement vu par RevenueCat.".into(),
-        kpis: vec![
-            carte("Téléchargements", f.mesure(l, m::TELECHARGEMENTS, None, Cumul::Somme)?, entier, fmt::evolution, false),
-            carte("Installs", f.mesure(l, m::INSTALLS, Some(m::INSTALLS_J7), Cumul::Somme)?, entier, fmt::evolution, false),
-            carte("Nouveaux clients", f.mesure(l, m::NOUVEAUX_CLIENTS, None, Cumul::Somme)?, entier, fmt::evolution, false),
-        ],
-    })
-}
-
-// conversion
-
-fn conversion(l: &Lectures, f: &Fenetre) -> Res<Conversion> {
-    let premier = l.premier_install()?;
-    let tous = premier.as_ref().map(|_| l.noeud(&[], &f.debut(), &f.fin())).transpose()?;
-    // la fenêtre d'avant ne se compare que si les installs la couvrent entière
-    let avant = match (f.avant(), &premier) {
-        (Some((debut, fin)), Some(p)) if *p <= debut => Some(l.noeud(&[], &debut, &fin)?),
-        _ => None,
-    };
-    let du = if f.jour() { jour::decale(&f.fin(), -13) } else { f.debut() };
-    let haut = |portes: &[noyau::lecture::data::LignePorte]| {
-        meilleur(&portes.iter().map(|p| if p.vues >= Segment::MINIMUM { p.conversion() } else { None }).collect::<Vec<_>>())
-    };
-    let portes = l.portes(&f.debut(), &f.fin())?;
-    let h = haut(&portes);
-    Ok(Conversion {
-        section: Section {
-            titre: "Conversion",
-            texte: "Les installs de la période et ce qu'ils ont fait depuis. Payant : RevenueCat les a vus payer, après un essai ou sans.".into(),
-            kpis: cartes_conversion(tous.as_ref(), avant.as_ref(), &l.par_jour(&[], &du, &f.fin())?),
-        },
-        portes: Some(portes.iter().map(|p| Porte {
-            nom: p.nom(),
-            vues: fmt::entier(p.vues as f64),
-            essais: fmt::entier(p.essais as f64),
-            directs: fmt::entier(p.directs as f64),
-            conversion: Taux::de(p.conversion(), h, p.vues),
-        }).collect()),
-    })
-}
-
-fn conversion_build(l: &Lectures, b: &Build, avant: Option<&Build>) -> Res<Conversion> {
-    let tous = l.noeud(&[b.filtre()], &b.debut, &b.fin)?;
-    let precedent = avant.map(|a| l.noeud(&[a.filtre()], &a.debut, &a.fin)).transpose()?;
-    Ok(Conversion {
-        section: Section {
-            titre: "Conversion",
-            texte: format!("Les installs du build et ce qu'ils ont fait depuis{}. L'argent, l'acquisition, l'usage et les portes du paywall ne se découpent pas par build.", compare(avant)),
-            kpis: cartes_conversion(Some(&tous), precedent.as_ref(), &l.par_jour(&[b.filtre()], &b.debut, &b.fin)?),
-        },
-        portes: None,
-    })
-}
-
-/// Les installs et ce qu'ils ont fait, comparés à `avant`, jour d'install par jour en sparkline.
-fn cartes_conversion(tous: Option<&Segment>, avant: Option<&Segment>, jours: &[Segment]) -> Vec<Carte> {
-    let chiffres = |v: &dyn Fn(&Segment) -> Option<f64>| Chiffres {
-        valeur: tous.and_then(v),
-        avant: avant.and_then(v),
-        serie: jours.iter().map(v).collect(),
-        jours: None,
-    };
-    let compte = |n: fn(&Segment) -> i64| chiffres(&|s| Some(n(s) as f64));
-    let paywall = compte(|s| s.paywall);
-    vec![
-        carte("Installs", compte(|s| s.installs), entier, fmt::evolution, false),
-        Carte {
-            titre: "Paywall vu".into(),
-            texte: paywall.valeur.map(fmt::entier).unwrap_or_else(|| VIDE.into()),
-            valeur: paywall.valeur,
-            delta: tous.and_then(Segment::paywall_vu).map(|t| format!("{} des installs", fmt::pourcent(t, 0))),
-            ton: "neutre",
-            note: None,
-            serie: paywall.serie,
-            inverse: false,
-        },
-        carte("Essais gratuits", compte(|s| s.essais), entier, fmt::evolution, false),
-        carte("Payants", compte(|s| s.payants), entier, fmt::evolution, false),
-        carte("Install → essai", chiffres(&Segment::essai), taux1, fmt::points, false),
-        carte("Install → payant", chiffres(&Segment::payant), taux1, fmt::points, false),
-        carte("Essai → payant", chiffres(&Segment::essai_vers_payant), taux1, fmt::points, false),
-        carte("Retour J1", chiffres(&Segment::retour_j1), taux1, fmt::points, false),
-    ]
 }
 
 /// Le meilleur taux d'une colonne, s'il y a au moins deux lignes assez grandes pour comparer et qu'il dépasse zéro.
@@ -504,42 +396,97 @@ fn table_cohortes(cohortes: &[Cohorte]) -> Vec<LigneCohorte> {
     }).collect()
 }
 
-// usage
+// le rond et le bilan, depuis les événements
 
-fn usage(l: &Lectures, f: &Fenetre) -> Res<Section> {
-    let actifs = f.mesure(l, m::ACTIFS, Some(m::ACTIFS_J7), Cumul::Moyenne)?;
-    let ronds_par_actif = ratio(&f.mesure(l, m::RONDS, Some(m::RONDS_J7), Cumul::Moyenne)?, &actifs);
-    let ia_par_actif = ratio(&f.mesure(l, m::COUT_IA, None, Cumul::Moyenne)?, &actifs);
-    Ok(Section {
-        titre: "Usage et coûts",
-        texte: "Les actifs du jour, ce qu'ils font et ce qu'ils coûtent en IA.".into(),
-        kpis: vec![
-            carte(if f.jour() { "Actifs" } else { "Actifs / jour" }, actifs, entier, fmt::evolution, false),
-            carte("Ronds finis", f.mesure(l, m::RONDS, Some(m::RONDS_J7), Cumul::Somme)?, entier, fmt::evolution, false),
-            carte("Ronds par actif", ronds_par_actif, |v| fmt::decimal(v, 2), fmt::evolution, false),
-            // pour 100 : par actif, il s'arrondit à 0,00 €
-            carte("Coût IA / 100 actifs", ia_par_actif, |v| fmt::euros(v * 100.0), fmt::evolution, true),
-        ],
-    })
+/// Des chiffres lus jour par jour sur une fenêtre : la courbe, le total qui fait la valeur, de quoi comparer.
+struct Lu<T> {
+    serie: Vec<T>,
+    total: T,
+    avant: Option<T>,
+    /// Les jours comptés quand la couverture ne prend qu'une partie de la fenêtre.
+    jours: Option<i64>,
+    /// Le premier jour couvert : avant, la courbe n'a pas de point.
+    depuis: String,
 }
 
-/// `a` par `b`, jour par jour et sur la période ; une période couverte en partie ne compte que les jours relevés des deux.
-fn ratio(a: &Chiffres, b: &Chiffres) -> Chiffres {
-    let d = |x: Option<f64>, y: Option<f64>| match (x, y) {
-        (Some(x), Some(y)) if y > 0.0 => Some(x / y),
-        _ => None,
-    };
-    let serie: Vec<Option<f64>> = a.serie.iter().zip(&b.serie).map(|(x, y)| d(*x, *y)).collect();
-    if a.jours.is_none() && b.jours.is_none() {
-        return Chiffres { valeur: d(a.valeur, b.valeur), avant: d(a.avant, b.avant), serie, jours: None };
+impl<T: ParJour> Lu<T> {
+    /// Aujourd'hui sur 14 jours de courbe, comparé au même jour de la semaine d'avant à la même heure si `heure` (lire
+    /// reçoit l'instant de coupe) ; sinon la période, comparée à celle d'avant quand la couverture la prend entière.
+    fn de(f: &Fenetre, depuis: &str, heure: bool, lire: impl Fn(&str, &str, Option<&str>) -> Res<Vec<T>>) -> Res<Lu<T>> {
+        let fin = f.fin();
+        if f.jour() {
+            let serie = lire(&jour::decale(&fin, -13), &fin, None)?;
+            let j7 = jour::decale(&fin, -7);
+            let coupe = jour::iso(&(f.maintenant - chrono::Duration::days(7)));
+            let avant = match heure && j7.as_str() >= depuis {
+                true => Some(T::somme(&lire(&j7, &j7, Some(&coupe))?)),
+                false => None,
+            };
+            return Ok(Lu { total: serie.last().cloned().unwrap_or_default(), serie, avant, jours: None, depuis: depuis.into() });
+        }
+        let (a, _) = f.avant().unwrap_or_default();
+        let compare = a.as_str() >= depuis;
+        let tout = lire(&if compare { a } else { f.debut() }, &fin, None)?;
+        let (avant, serie) = tout.split_at(tout.len().saturating_sub(f.n() as usize));
+        Ok(Lu::sur(serie.to_vec(), compare.then(|| T::somme(avant)), depuis))
     }
-    let paires: Vec<(f64, f64)> = a.serie.iter().zip(&b.serie).filter_map(|(x, y)| Some(((*x)?, (*y)?))).collect();
-    Chiffres {
-        valeur: d(Some(paires.iter().map(|p| p.0).sum()), Some(paires.iter().map(|p| p.1).sum())),
-        avant: None,
-        serie,
-        jours: (!paires.is_empty()).then_some(paires.len() as i64),
+
+    /// `serie` comptée sur ses jours couverts.
+    fn sur(serie: Vec<T>, avant: Option<T>, depuis: &str) -> Lu<T> {
+        let couverts: Vec<T> = serie.iter().filter(|j| j.jour() >= depuis).cloned().collect();
+        Lu {
+            total: T::somme(&couverts),
+            avant,
+            jours: (!couverts.is_empty() && couverts.len() < serie.len()).then_some(couverts.len() as i64),
+            serie,
+            depuis: depuis.into(),
+        }
     }
+
+    fn chiffres(&self, mesure: impl Fn(&T) -> Option<f64>) -> Chiffres {
+        Chiffres {
+            valeur: mesure(&self.total),
+            avant: self.avant.as_ref().and_then(&mesure),
+            serie: self.serie.iter().map(|j| if j.jour() >= self.depuis.as_str() { mesure(j) } else { None }).collect(),
+            jours: self.jours,
+        }
+    }
+}
+
+/// Les événements du rond, du bilan et du retour sur la fenêtre ; None tant que la table ne couvre pas un jour entier.
+fn evenements(l: &Lectures, f: &Fenetre) -> Res<Option<Lu<JourRonds>>> {
+    let Some(depuis) = l.evenements_depuis()? else { return Ok(None) };
+    Lu::de(f, &depuis, true, |debut, fin, coupe| l.ronds_par_jour(debut, fin, coupe)).map(Some)
+}
+
+fn rond(l: &Lectures, f: &Fenetre) -> Res<Option<Section>> {
+    let Some(lu) = evenements(l, f)? else { return Ok(None) };
+    Ok(Some(Section {
+        titre: "Le rond",
+        texte: "Tous les ronds joués, nouveaux et anciens users, sans les filtres de l'arbre. Quittés en cours : les ronds quittés après au moins une réponse, sur les ronds commencés. Formes dites : les tournures du jour que l'apprenant a dites, sur celles du rond. Durée et réponse du tuteur : des médianes.".into(),
+        kpis: vec![
+            carte("Quittés en cours", lu.chiffres(JourRonds::quittes), taux1, fmt::points, true),
+            carte("Formes dites", lu.chiffres(JourRonds::dites), taux1, fmt::points, false),
+            carte("Réponses justes", lu.chiffres(JourRonds::justes), taux1, fmt::points, false),
+            carte("Réponses à la voix", lu.chiffres(JourRonds::voix), taux1, fmt::points, false),
+            carte("Durée d'un rond", lu.chiffres(JourRonds::duree), fmt::cumul, fmt::evolution, false),
+            carte("Réponse du tuteur", lu.chiffres(JourRonds::tuteur), fmt::duree, fmt::evolution, true),
+        ],
+    }))
+}
+
+fn bilan(l: &Lectures, f: &Fenetre) -> Res<Option<Section>> {
+    let Some(lu) = evenements(l, f)? else { return Ok(None) };
+    Ok(Some(Section {
+        titre: "Bilan et retour",
+        texte: "Le bilan après le rond et son quiz, ce qui ramène dans l'app, la feuille d'avis maison.".into(),
+        kpis: vec![
+            carte("Bilan lu jusqu'au bout", lu.chiffres(JourRonds::bilan_fini), taux1, fmt::points, false),
+            carte("Quiz du bilan juste", lu.chiffres(JourRonds::quiz_juste), taux1, fmt::points, false),
+            carte("Ouvertes par une notif", lu.chiffres(JourRonds::par_notif), taux1, fmt::points, false),
+            carte("Avis : oui", lu.chiffres(JourRonds::avis_oui), taux1, fmt::points, false),
+        ],
+    }))
 }
 
 // arbre des installs
@@ -570,7 +517,32 @@ struct Entonnoir {
     fragile: Option<String>,
     vide: Option<&'static str>,
     pas: Vec<Pas>,
+    /// None tant qu'aucun install du nœud ne se mesure (avant `RONDS_DEPUIS`).
+    premier_rond: Option<PremierRond>,
     tuiles: Vec<Tuile>,
+}
+
+/// L'anneau du premier rond : au centre la part des installs qui en commencent un, autour ses trois parts.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PremierRond {
+    centre: String,
+    ecart: Option<Ecart>,
+    aide: String,
+    parts: Vec<PartRond>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PartRond {
+    libelle: &'static str,
+    couleur: &'static str,
+    /// La part des installs mesurés, de 0 à 1 : la longueur de l'arc.
+    part: f64,
+    valeur: String,
+    sous: Option<String>,
+    ecart: Option<Ecart>,
+    aide: String,
 }
 
 /// Une marche de l'entonnoir, ou le passage d'une marche à la suivante.
@@ -608,6 +580,7 @@ struct Ecart {
 struct Tuile {
     libelle: &'static str,
     valeur: String,
+    ecart: Option<Ecart>,
     aide: String,
 }
 
@@ -705,7 +678,7 @@ impl Colonne {
     }
 }
 
-const COLONNES: [Colonne; 8] = [
+const COLONNES: [Colonne; 9] = [
     Colonne { titre: "Installs", aide: "Installs de la valeur sur la période", largeur: "installs",
               n: Some(|s| s.installs), taux: None, base: |s| s.installs },
     Colonne { titre: "Paywall", aide: "Ont vu le paywall, sur les installs", largeur: "taux",
@@ -716,7 +689,9 @@ const COLONNES: [Colonne; 8] = [
               largeur: "taux", n: Some(|s| s.payants), taux: Some(Segment::payant), base: |s| s.installs },
     Colonne { titre: "Essai payé", aide: "Essais finis qui ont payé, sur les essais finis", largeur: "taux",
               n: Some(|s| s.essais_payes), taux: Some(Segment::essai_vers_payant), base: Segment::essais_finis },
-    Colonne { titre: "Rond", aide: "Ont fini au moins un rond, sur les installs depuis la mesure des ronds", largeur: "court",
+    Colonne { titre: "Lancé", aide: "Ont commencé au moins un rond, sur les installs depuis la mesure des ronds", largeur: "court",
+              n: None, taux: Some(Segment::commence), base: |s| s.base_rond },
+    Colonne { titre: "Fini", aide: "Ont fini au moins un rond, sur les installs depuis la mesure des ronds", largeur: "court",
               n: None, taux: Some(Segment::rond), base: |s| s.base_rond },
     Colonne { titre: "J1", aide: "Ont fini un rond le lendemain, sur les installs assez anciens depuis la mesure des ronds",
               largeur: "court", n: None, taux: Some(Segment::retour_j1), base: |s| s.base_j1 },
@@ -739,7 +714,6 @@ fn vue_arbre(l: &Lectures, debut: &str, fin: &str, racine: &[Filtre], chemin: &[
     let tous: Vec<Filtre> = racine.iter().chain(chemin).cloned().collect();
     let noeuds = (0..=chemin.len()).map(|k| l.noeud(&tous[..racine.len() + k], debut, fin)).collect::<Res<Vec<_>>>()?;
     let noeud = &noeuds[chemin.len()];
-    let parent = chemin.len().checked_sub(1).map(|k| &noeuds[k]);
     let racine_libelle = racine.first().map(Filtre::libelle).unwrap_or_else(|| "Tous les installs".into());
     let miettes = noeuds.iter().enumerate().map(|(k, n)| {
         let installs = fmt::entier(n.installs as f64);
@@ -751,9 +725,19 @@ fn vue_arbre(l: &Lectures, debut: &str, fin: &str, racine: &[Filtre], chemin: &[
     }).collect();
     let mut etapes = vec![("Installs", noeud.installs)];
     etapes.extend(ECRANS.iter().map(|e| e.1).zip(l.tunnel(&tous, debut, fin)?));
+    // les ronds des installs du nœud, depuis qu'ils se mesurent
+    let ronds = |k: usize| -> Res<PremiersRonds> {
+        let d = debut.max(RONDS_DEPUIS);
+        if fin < d { return Ok(PremiersRonds::default()) }
+        Ok(PremiersRonds::somme(&l.premiers_ronds(&tous[..racine.len() + k], d, fin)?))
+    };
+    let parent = match chemin.len().checked_sub(1) {
+        Some(k) => Some((&noeuds[k], ronds(k)?)),
+        None => None,
+    };
     Ok(VueArbre {
         miettes,
-        entonnoir: entonnoir(noeud, &noeuds[0], parent, chemin),
+        entonnoir: entonnoir((noeud, &ronds(chemin.len())?), &noeuds[0], parent.as_ref().map(|(s, r)| (*s, r)), chemin),
         tunnel: tunnel(&etapes, chemin),
         decoupe: table(decoupe, &l.enfants(&tous, decoupe, debut, fin)?, noeud, chemin, tri),
         dimensions: DIMENSIONS.to_vec(),
@@ -762,32 +746,41 @@ fn vue_arbre(l: &Lectures, debut: &str, fin: &str, racine: &[Filtre], chemin: &[
 
 fn pc(t: Option<f64>) -> String { t.map(taux1).unwrap_or_else(|| VIDE.into()) }
 
+/// L'écart avec le nœud du dessus, vert s'il va dans le bon sens (une baisse si `inverse`), gris quand la base est
+/// trop petite pour trancher.
+fn ecart(n: Option<f64>, p: Option<f64>, dire: fn(Option<f64>, Option<f64>) -> Option<String>, valeur: impl Fn(f64) -> String,
+         base: i64, inverse: bool) -> Option<Ecart> {
+    let texte = dire(n, p)?;
+    let e = fmt::ecart(n, p).unwrap_or(0.0) * if inverse { -1.0 } else { 1.0 };
+    Some(Ecart {
+        texte,
+        couleur: if base < Segment::MINIMUM || e.abs() < 0.0005 { "secondaire" } else if e > 0.0 { "succes" } else { "danger" },
+        aide: format!("Le nœud du dessus : {}", p.map(valeur).unwrap_or_else(|| VIDE.into())),
+    })
+}
+
 /// Le nœud ouvert en entonnoir : installs, paywall vu, essai, payant, chacun rapporté aux installs du nœud et comparé
-/// au nœud du dessus.
-fn entonnoir(n: &Segment, racine: &Segment, parent: Option<&Segment>, chemin: &[Filtre]) -> Entonnoir {
+/// au nœud du dessus ; dessous, les ronds de ses installs.
+fn entonnoir((n, r): (&Segment, &PremiersRonds), racine: &Segment, parent: Option<(&Segment, &PremiersRonds)>,
+             chemin: &[Filtre]) -> Entonnoir {
     let fragile = (n.installs > 0 && n.installs < Segment::MINIMUM).then(|| {
         format!("Moins de {} installs : un install de plus bouge les taux de plusieurs points", Segment::MINIMUM)
     });
     if n.installs == 0 {
-        return Entonnoir { fragile, vide: Some("Aucun install ne passe ces filtres sur la période."), pas: vec![], tuiles: vec![] };
+        return Entonnoir {
+            fragile, vide: Some("Aucun install ne passe ces filtres sur la période."), pas: vec![], premier_rond: None, tuiles: vec![],
+        };
     }
+    let e = |v: i64| fmt::entier(v as f64);
     let part = |nombre: i64| nombre as f64 / n.installs.max(1) as f64;
     let marche = |nom: &'static str, nombre: i64, couleur: &'static str, filtre: Filtre, taux: fn(&Segment) -> Option<f64>,
                   sous: Option<String>| {
         let posee = chemin.contains(&filtre);
-        let ecart = parent.and_then(|p| {
-            let texte = fmt::points(taux(n), taux(p))?;
-            let e = fmt::ecart(taux(n), taux(p)).unwrap_or(0.0);
-            let fiable = n.installs >= Segment::MINIMUM;
-            Some(Ecart {
-                texte,
-                couleur: if !fiable || e.abs() < 0.0005 { "secondaire" } else if e > 0.0 { "succes" } else { "danger" },
-                aide: format!("Le nœud du dessus : {}", pc(taux(p))),
-            })
-        });
         Pas::Marche {
-            nom, nombre: fmt::entier(nombre as f64), couleur, sous, part: part(nombre),
-            taux: Some(taux1(part(nombre))), ecart, filtre: Some(filtre), posee,
+            nom, nombre: e(nombre), couleur, sous, part: part(nombre),
+            taux: Some(taux1(part(nombre))),
+            ecart: parent.and_then(|(p, _)| ecart(taux(n), taux(p), fmt::points, taux1, n.installs, false)),
+            filtre: Some(filtre), posee,
             aide: Some(if posee { "Retirer ce filtre".into() } else { format!("Garder ceux qui sont passés par « {nom} »") }),
         }
     };
@@ -795,42 +788,79 @@ fn entonnoir(n: &Segment, racine: &Segment, parent: Option<&Segment>, chemin: &[
         texte: format!("{} {texte}", pc(t)),
         perte: (perte > 0).then(|| fmt::delta(-perte as f64, false)),
     };
+    let tous = format!("{} de tous les installs", taux1(n.installs as f64 / racine.installs.max(1) as f64));
+    let dont: Vec<String> = [
+        (n.payants > n.essais_payes).then(|| format!("{} sans essai", e(n.payants - n.essais_payes))),
+        (n.a_verifier > 0).then(|| format!("{} à vérifier", e(n.a_verifier))),
+    ].into_iter().flatten().collect();
     let pas = vec![
         Pas::Marche {
-            nom: "Installs", nombre: fmt::entier(n.installs as f64), couleur: "secondaire",
-            sous: parent.map(|_| format!("{} de tous les installs", taux1(n.installs as f64 / racine.installs.max(1) as f64))),
+            nom: "Installs", nombre: e(n.installs), couleur: "secondaire",
+            sous: parent.map(|(p, _)| match chemin.len() {
+                1 => tous.clone(),
+                _ => format!("{} du nœud au-dessus, {tous}", pc(Segment::taux(n.installs, p.installs))),
+            }),
             part: 1.0, taux: None, ecart: None, filtre: None, posee: false, aide: None,
         },
         passage(n.paywall_vu(), "voient le paywall", n.installs - n.paywall),
         marche("Paywall vu", n.paywall, "bleu", Filtre::Paywall, Segment::paywall_vu, None),
         passage(Segment::taux(n.essais, n.paywall), "prennent l'essai", n.paywall - n.essais),
         marche("Essai gratuit", n.essais, "violet", Filtre::Essai, Segment::essai,
-               (n.en_cours > 0).then(|| format!("dont {} en cours", fmt::entier(n.en_cours as f64)))),
+               (n.en_cours > 0).then(|| format!("dont {} en cours", e(n.en_cours)))),
         passage(n.essai_vers_payant(), "des essais finis paient", n.essais_finis() - n.essais_payes),
         marche("Payant", n.payants, "succes", Filtre::Payant, Segment::payant,
-               (n.payants > n.essais_payes).then(|| format!("dont {} sans essai", fmt::entier((n.payants - n.essais_payes) as f64)))),
+               (!dont.is_empty()).then(|| format!("dont {}", dont.join(", ")))),
     ];
+    Entonnoir { fragile, vide: None, pas, premier_rond: premier_rond(n, parent.map(|(p, _)| p)), tuiles: tuiles(r, parent.map(|(_, p)| p)) }
+}
+
+/// Les installs mesurés du nœud qui finissent un rond, qui en commencent un sans en finir aucun, qui n'en commencent
+/// aucun ; chaque part comparée au nœud du dessus. Un install qui finit un rond l'a commencé, les trois font le tout.
+fn premier_rond(n: &Segment, parent: Option<&Segment>) -> Option<PremierRond> {
+    if n.base_rond == 0 { return None }
     let e = |v: i64| fmt::entier(v as f64);
-    let depuis = fmt::jour_court_cle(RONDS_DEPUIS);
-    let tuiles = vec![
-        Tuile { libelle: "Achats sans essai", valeur: e(n.directs),
-                aide: "Achats lancés depuis le paywall sans essai, cartes refusées comprises : Payant dit lesquels ont été encaissés".into() },
-        Tuile { libelle: "Essais en cours", valeur: e(n.en_cours), aide: "Essais que RevenueCat voit encore courir".into() },
-        Tuile { libelle: "À vérifier", valeur: e(n.a_verifier),
-                aide: "Convertis que RevenueCat n'a pas encore lus, ou qu'il ne connaît pas en production".into() },
-        Tuile { libelle: "Rond fini", valeur: pc(n.rond()),
-                aide: format!("{} sur {} installs depuis le {depuis} ont fini au moins un rond", e(n.ronds), e(n.base_rond)) },
-        Tuile { libelle: "Retour J1", valeur: pc(n.retour_j1()),
-                aide: format!("{} sur {} installs assez anciens, depuis le {depuis}, ont fini un rond le lendemain", e(n.j1), e(n.base_j1)) },
-        Tuile { libelle: "Retour J7", valeur: pc(n.retour_j7()),
-                aide: format!("{} sur {} installs assez anciens, depuis le {depuis}, ont fini un rond 7 jours après", e(n.j7), e(n.base_j7)) },
-        Tuile { libelle: "Part des installs", valeur: pc(Segment::taux(n.installs, racine.installs)),
-                aide: format!("{} des {} installs en haut de l'arbre", e(n.installs), e(racine.installs)) },
-        Tuile { libelle: "Part du nœud au-dessus", valeur: pc(parent.and_then(|p| Segment::taux(n.installs, p.installs))),
-                aide: parent.map(|p| format!("{} des {} installs du nœud au-dessus", e(n.installs), e(p.installs)))
-                    .unwrap_or_else(|| "Aucun filtre posé".into()) },
-    ];
-    Entonnoir { fragile, vide: None, pas, tuiles }
+    let fini = |s: &Segment| Segment::taux(s.ronds, s.base_rond);
+    let sans_finir = |s: &Segment| Segment::taux(s.commences - s.ronds, s.base_rond);
+    let jamais = |s: &Segment| Segment::taux(s.base_rond - s.commences, s.base_rond);
+    let part = |libelle, couleur, mesure: fn(&Segment) -> Option<f64>, inverse, nombre: i64, sous: Option<String>, aide: String| PartRond {
+        libelle, couleur, part: mesure(n).unwrap_or(0.0), valeur: pc(mesure(n)), sous, aide: format!("{} installs : {aide}", e(nombre)),
+        ecart: parent.and_then(|p| ecart(mesure(n), mesure(p), fmt::points, taux1, n.base_rond, inverse)),
+    };
+    // avant RONDS_DEPUIS, les ronds ne se mesuraient pas
+    let base = match n.base_rond < n.installs {
+        true => format!("Sur les {} installs mesurés, les ronds se lisent depuis le {}", e(n.base_rond), fmt::jour_court_cle(RONDS_DEPUIS)),
+        false => format!("Sur les {} installs du nœud", e(n.base_rond)),
+    };
+    Some(PremierRond {
+        centre: pc(n.commence()),
+        ecart: parent.and_then(|p| ecart(n.commence(), p.commence(), fmt::points, taux1, n.base_rond, false)),
+        aide: format!("{base}, {} ont commencé au moins un rond", e(n.commences)),
+        parts: vec![
+            part("Rond fini", "succes", fini, false, n.ronds, None, "ont fini au moins un rond".into()),
+            part("Commencé, pas fini", "ambre", sans_finir, true, n.commences - n.ronds,
+                 n.fin_du_rond().map(|t| format!("{} de ceux qui commencent", taux1(1.0 - t))),
+                 format!("ont commencé un rond sans en finir aucun, sur les {} qui ont commencé", e(n.commences))),
+            part("Pas commencé", "tertiaire", jamais, true, n.base_rond - n.commences, None,
+                 "n'ont commencé aucun rond".into()),
+        ],
+    })
+}
+
+/// Ce que les installs du nœud ont fait de leurs ronds, chaque moyenne comparée au nœud du dessus.
+fn tuiles(r: &PremiersRonds, parent: Option<&PremiersRonds>) -> Vec<Tuile> {
+    let e = |v: i64| fmt::entier(v as f64);
+    let tuile = |libelle, mesure: fn(&PremiersRonds) -> Option<f64>, texte: fn(f64) -> String, inverse, aide: String| Tuile {
+        libelle, valeur: mesure(r).map(texte).unwrap_or_else(|| VIDE.into()), aide,
+        ecart: parent.and_then(|p| ecart(mesure(r), mesure(p), fmt::evolution, texte, r.installs, inverse)),
+    };
+    vec![
+        tuile("Délai au 1er rond", PremiersRonds::delai, fmt::cumul, true,
+              format!("La médiane, de l'install au premier rond commencé, sur {} installs", e(r.delais.len() as i64))),
+        tuile("Ronds par install", PremiersRonds::ronds_par_install, |v| fmt::decimal(v, 2), false,
+              format!("{} ronds finis par les {} installs mesurés, depuis leur install", e(r.ronds), e(r.installs))),
+        tuile("Jours avec un rond", PremiersRonds::jours_par_fidele, |v| fmt::decimal(v, 1), false,
+              format!("{} jours avec un rond fini, pour les {} installs qui en ont fini un", e(r.jours), e(r.fini))),
+    ]
 }
 
 /// Le tunnel d'onboarding : chaque étape rapportée aux installs, la perte depuis la précédente, la pire en ambre.
@@ -958,12 +988,17 @@ mod tests {
     }
 
     #[test]
-    fn ratio_sur_les_jours_releves_des_deux() {
-        let a = Chiffres { valeur: Some(6.0), avant: None, serie: vec![Some(2.0), Some(4.0), None], jours: Some(2) };
-        let b = Chiffres { valeur: Some(4.0), avant: None, serie: vec![Some(1.0), None, Some(3.0)], jours: None };
-        let r = ratio(&a, &b);
-        assert_eq!(r.valeur, Some(2.0));
-        assert_eq!(r.jours, Some(1));
-        assert_eq!(r.serie, vec![Some(2.0), None, None]);
+    fn premier_rond_partage_les_installs_mesures() {
+        let segment = |installs, commences, ronds| Segment { installs, base_rond: installs, commences, ronds, ..Default::default() };
+        let (n, p) = (segment(50, 40, 30), segment(100, 80, 70));
+        let a = premier_rond(&n, Some(&p)).unwrap();
+        let parts: Vec<f64> = a.parts.iter().map(|p| p.part).collect();
+        assert_eq!(parts, [0.6, 0.2, 0.2]);
+        assert_eq!(a.parts[1].sous.as_deref(), Some("25,0 % de ceux qui commencent"));
+        // 20 % commencent sans finir, contre 10 % au-dessus : une hausse, donc en rouge ; même part qui commence, en gris
+        let couleurs: Vec<_> = a.parts.iter().map(|p| p.ecart.as_ref().unwrap().couleur).collect();
+        assert_eq!(couleurs, ["danger", "danger", "secondaire"]);
+        assert_eq!(a.ecart.unwrap().couleur, "secondaire");
+        assert!(premier_rond(&Segment { installs: 5, ..Default::default() }, None).is_none());
     }
 }

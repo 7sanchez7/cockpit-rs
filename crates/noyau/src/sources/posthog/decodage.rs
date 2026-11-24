@@ -4,7 +4,7 @@ use crate::dimension::Dimension;
 use crate::erreur::{format_err, Res};
 use crate::jour::{self, Date};
 use crate::metrique::{self, Boutique};
-use crate::modeles::{Evenement, Install, Porte, TypeFil};
+use crate::modeles::{Evenement, EvenementApp, Install, Porte, TypeFil};
 use crate::sources::pays_fr;
 use crate::store::Store;
 use chrono::DateTime;
@@ -37,6 +37,7 @@ pub struct Series {
     pub actifs: HashMap<String, Compte>,
     pub essais: HashMap<String, Compte>,
     pub ronds: HashMap<String, Compte>,
+    pub commences: HashMap<String, Compte>,
     pub installs: HashMap<String, Compte>,
 }
 
@@ -58,6 +59,15 @@ pub const NOMS_PORTES: [(&str, &str); 14] = [
 
 /// Les lignes d'une réponse HogQL, colonnes dans l'ordre du select.
 pub fn lignes(reponse: &Map<String, Value>) -> Res<Lignes> {
+    // jamais de chiffre tronqué en silence
+    if reponse.get("hasMore").and_then(Value::as_bool) == Some(true) {
+        return Err(format_err("HogQL coupé par sa limit"));
+    }
+    page(reponse)
+}
+
+/// Les lignes d'une page, coupée ou non par sa limit.
+pub fn page(reponse: &Map<String, Value>) -> Res<Lignes> {
     let lignes = reponse
         .get("results")
         .and_then(Value::as_array)
@@ -67,10 +77,6 @@ pub fn lignes(reponse: &Map<String, Value>) -> Res<Lignes> {
         cles.sort();
         return Err(format_err(format!("HogQL sans results ({})", cles.join(", "))));
     };
-    // jamais de chiffre tronqué en silence
-    if reponse.get("hasMore").and_then(Value::as_bool) == Some(true) {
-        return Err(format_err("HogQL coupé par sa limit"));
-    }
     Ok(lignes)
 }
 
@@ -86,7 +92,7 @@ pub fn par_jour(lignes: &Lignes, colonnes: usize) -> Res<HashMap<String, Vec<i64
 
 /// Les lignes de `requete_jours` et `requete_installs` en séries, une par segment.
 pub fn series(jours: &Lignes, installs: &Lignes) -> Res<HashMap<Option<Boutique>, Series>> {
-    let j = par_jour(jours, 6 * SEGMENTS.len())?;
+    let j = par_jour(jours, 8 * SEGMENTS.len())?;
     let i = par_jour(installs, 2 * SEGMENTS.len())?;
     let comptes = |d: &HashMap<String, Vec<i64>>, c: usize| -> HashMap<String, Compte> {
         d.iter().map(|(k, v)| (k.clone(), Compte { tout: v[c], coupe: v[c + 1] })).collect()
@@ -96,9 +102,10 @@ pub fn series(jours: &Lignes, installs: &Lignes) -> Res<HashMap<Option<Boutique>
         .enumerate()
         .map(|(k, b)| {
             let s = Series {
-                actifs: comptes(&j, 6 * k),
-                essais: comptes(&j, 6 * k + 2),
-                ronds: comptes(&j, 6 * k + 4),
+                actifs: comptes(&j, 8 * k),
+                essais: comptes(&j, 8 * k + 2),
+                ronds: comptes(&j, 8 * k + 4),
+                commences: comptes(&j, 8 * k + 6),
                 installs: comptes(&i, 2 * k),
             };
             (*b, s)
@@ -166,16 +173,18 @@ pub fn texte_essai(produit: Option<&str>, porte: Option<&str>, pays: Option<&str
     morceaux.join(", ")
 }
 
-/// Lignes `jour, loin, paywall, essai, direct, rond, j1, j7, j14, j30, client`, puis une valeur par `Dimension::lues`
-/// (plusieurs séparées par des virgules, texte vide sans réponse) ; la zone se déduit du pays.
+/// Lignes `jour, loin, paywall, essai, direct, commence, rond, j1, j7, j14, j30, client, personne, commences, ronds, jours_ronds,
+/// premier_rond, dernier_rond`, puis une valeur par `Dimension::lues` (plusieurs séparées par des virgules, texte vide sans
+/// réponse) ; la zone se déduit du pays.
 pub fn installs(lignes: &Lignes) -> Res<Vec<Install>> {
     lignes
         .iter()
         .map(|l| {
-            forme(l, 11 + Dimension::lues().count())?;
-            let n = l[1..=9].iter().map(entier).collect::<Res<Vec<_>>>()?;
+            forme(l, 18 + Dimension::lues().count())?;
+            let n = l[1..=10].iter().map(entier).collect::<Res<Vec<_>>>()?;
+            let r = l[13..=16].iter().map(entier).collect::<Res<Vec<_>>>()?;
             let mut valeurs: BTreeMap<Dimension, Vec<String>> = BTreeMap::new();
-            for (d, v) in Dimension::lues().zip(&l[11..]) {
+            for (d, v) in Dimension::lues().zip(&l[18..]) {
                 let liste: Vec<String> =
                     texte(v)?.split(',').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
                 if !liste.is_empty() {
@@ -185,19 +194,27 @@ pub fn installs(lignes: &Lignes) -> Res<Vec<Install>> {
             if let Some(z) = valeurs.get(&Dimension::Pays).and_then(|p| p.first()).and_then(|p| Dimension::zone(p)) {
                 valeurs.insert(Dimension::Zone, vec![z.to_string()]);
             }
-            let client = texte(&l[10])?;
+            let client = texte(&l[11])?;
+            let dernier = texte(&l[17])?;
             Ok(Install {
                 jour: texte(&l[0])?,
                 loin: n[0],
                 paywall: n[1] != 0,
                 essai: n[2] != 0,
                 direct: n[3] != 0,
-                rond: n[4] != 0,
-                j1: n[5] != 0,
-                j7: n[6] != 0,
-                j14: n[7] != 0,
-                j30: n[8] != 0,
+                commence: n[4] != 0,
+                rond: n[5] != 0,
+                j1: n[6] != 0,
+                j7: n[7] != 0,
+                j14: n[8] != 0,
+                j30: n[9] != 0,
                 client: (!client.is_empty()).then_some(client),
+                personne: texte(&l[12])?,
+                commences: r[0],
+                ronds: r[1],
+                jours_ronds: r[2],
+                premier_rond: (r[3] >= 0).then_some(r[3]),
+                dernier_rond: (!dernier.is_empty()).then_some(dernier),
                 valeurs,
             })
         })
@@ -211,6 +228,38 @@ pub fn portes(lignes: &Lignes) -> Res<Vec<Porte>> {
         .map(|l| {
             forme(l, 5)?;
             Ok(Porte { jour: texte(&l[0])?, porte: texte(&l[1])?, vues: entier(&l[2])?, essais: entier(&l[3])?, directs: entier(&l[4])? })
+        })
+        .collect()
+}
+
+/// Lignes `uuid, personne, instant, reçu (ms), nom, plateforme, build, jour, [[clé, JSON brut]…]` en événements de l'app.
+pub fn evenements(lignes: &Lignes) -> Res<Vec<EvenementApp>> {
+    lignes
+        .iter()
+        .map(|l| {
+            forme(l, 9)?;
+            let instant = entier(&l[2])?;
+            let at: Date = DateTime::from_timestamp(instant, 0).ok_or_else(|| format_err(format!("HogQL, instant illisible : {instant}")))?;
+            let paires = l[8].as_array().ok_or_else(|| format_err(format!("HogQL, propriétés attendues : {}", l[8])))?;
+            let mut props = Map::new();
+            for p in paires {
+                let (Some(cle), Some(brut)) = (p.get(0).and_then(Value::as_str), p.get(1).and_then(Value::as_str)) else {
+                    return Err(format_err(format!("HogQL, propriété illisible : {p}")));
+                };
+                // un brut qui n'est pas du JSON reste en texte
+                props.insert(cle.into(), serde_json::from_str(brut).unwrap_or_else(|_| Value::String(brut.into())));
+            }
+            Ok(EvenementApp {
+                uuid: texte(&l[0])?,
+                personne: texte(&l[1])?,
+                at: jour::iso(&at),
+                jour: texte(&l[7])?,
+                nom: texte(&l[4])?,
+                plateforme: texte(&l[5])?,
+                build: texte(&l[6])?,
+                props: Value::Object(props).to_string(),
+                recu_ms: entier(&l[3])?,
+            })
         })
         .collect()
 }
@@ -263,9 +312,11 @@ pub fn ecrire(l: &LecturePostHog, business: &str, jours: &[String], jours_heures
                 serie(&nom(b, metrique::ESSAIS_J7), j, -1, lu(&s.essais, &avant).coupe)?;
                 if j.as_str() >= RONDS_DEPUIS {
                     serie(&nom(b, metrique::RONDS), j, -1, lu(&s.ronds, j).tout)?;
+                    serie(&nom(b, metrique::RONDS_COMMENCES), j, -1, lu(&s.commences, j).tout)?;
                 }
                 if avant.as_str() >= RONDS_DEPUIS {
                     serie(&nom(b, metrique::RONDS_J7), j, -1, lu(&s.ronds, &avant).coupe)?;
+                    serie(&nom(b, metrique::RONDS_COMMENCES_J7), j, -1, lu(&s.commences, &avant).coupe)?;
                 }
             }
         }

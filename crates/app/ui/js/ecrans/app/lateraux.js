@@ -1,7 +1,7 @@
 // Les panneaux latéraux de l'accueil : Réseaux à gauche, Plan et « À traiter » à droite. Repliés, chacun devient un rail.
 // Le dépli est gardé dans les réglages `accueil.reseau` et `accueil.plan` ("0" replié, rien déplié), comme en Swift.
 
-import { h, pastille, point, surtitre, vide, enTetePanneau, miniature, logoPlateforme, couleurTon, caseRonde } from "../../composants.js";
+import { h, pastille, point, surtitre, vide, enTetePanneau, miniature, logoPlateforme, couleurTon, caseRonde, actualiser, RESEAUX } from "../../composants.js";
 import { menu, boutonPanneau, icone, lienSecondaire } from "./outils.js";
 
 const LIMITE_TACHES = 5;
@@ -28,7 +28,7 @@ export function panneauReseau(ctx, reseau, ouvert, basculer) {
   return h(
     "aside",
     { class: "lateral reseau-lateral ouvert verre" },
-    h("div", { class: "marge-m" }, enTetePanneau("Réseaux", boutonPanneau("barreGauche", "Replier les réseaux", basculer))),
+    h("div", { class: "marge-m" }, enTetePanneau("Réseaux", actualiser(...RESEAUX), boutonPanneau("barreGauche", "Replier les réseaux", basculer))),
     j &&
       h(
         "div",
@@ -96,7 +96,7 @@ export function panneauPlan(ctx, plan, taches, ouvert, basculer) {
     h(
       "section",
       { class: "panneau verre plan" },
-      enTetePanneau("Plan", boutonPanneau("barreDroite", "Replier le plan", basculer)),
+      enTetePanneau("Plan", actualiser("notes"), boutonPanneau("barreDroite", "Replier le plan", basculer)),
       h("div", { class: "plan-date" }, plan.date),
       plan.sections.length
         ? h("div", { class: "plan-sections" }, plan.sections.map(section))
@@ -131,7 +131,7 @@ function panneauTaches(ctx, taches) {
   return h(
     "section",
     { class: "panneau-taches verre" },
-    h("div", { class: "marge-m tete-taches" }, enTetePanneau("À traiter", taches.length > 0 && pastille(String(taches.length), { couleur: "var(--ambre)" }))),
+    h("div", { class: "marge-m tete-taches" }, enTetePanneau("À traiter", taches.length > 0 && pastille(String(taches.length), { couleur: "var(--ambre)" }), actualiser("firebase"))),
     taches.length === 0
       ? vide("Rien à traiter.")
       : [

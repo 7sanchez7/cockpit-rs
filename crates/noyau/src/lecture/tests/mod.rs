@@ -9,6 +9,7 @@ mod argent;
 mod format;
 mod lectures;
 mod percee;
+mod rond;
 mod sante;
 mod recherche;
 mod sav;

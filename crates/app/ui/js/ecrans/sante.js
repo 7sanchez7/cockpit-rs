@@ -1,7 +1,7 @@
 // Santé : les sources répondent-elles, l'IA tient-elle (reprises, 429, latence), combien coûte la journée.
 // Tout arrive formaté de la commande `sante` ; les couleurs y sont des noms de variables de theme.css.
 
-import { h, panneau, rangee, segmente, grilleKpi, kpi, pastille, point, vide, legende, boutonRelancer } from "../composants.js";
+import { h, panneau, rangee, segmente, grilleKpi, kpi, pastille, point, vide, legende, boutonRelancer, actualiser } from "../composants.js";
 import * as F from "../format.js";
 
 const v = (nom) => `var(--${nom})`;
@@ -126,7 +126,7 @@ function panneauIA(d, ctx) {
     corps.replaceChildren(contenuIA((await charger(ctx)).ia));
   };
   return panneau(
-    { titre: "IA par fournisseur", accessoire: segmente([{ id: false, libelle: "Aujourd'hui" }, { id: true, libelle: "Hier" }], local.hier, choisir) },
+    { titre: "IA par fournisseur", accessoire: [segmente([{ id: false, libelle: "Aujourd'hui" }, { id: true, libelle: "Hier" }], local.hier, choisir), actualiser("firebase")] },
     corps,
   );
 }
@@ -136,7 +136,7 @@ function panneauIA(d, ctx) {
 function panneauCout(cout) {
   const jours = cout.jours;
   if (!jours.some((j) => j.valeur != null)) {
-    return panneau({ titre: "Coût IA, 14 jours" }, vide("Aucun coût relevé : la source Firebase doit tourner."));
+    return panneau({ titre: "Coût IA, 14 jours", accessoire: actualiser("firebase") }, vide("Aucun coût relevé : la source Firebase doit tourner."));
   }
   const aujourdhui = jours.length - 1;
   const texte = h("div", { class: "texte-cout" }, jours[aujourdhui].texte);
@@ -154,7 +154,7 @@ function panneauCout(cout) {
   }
   const graphique = graphiqueBarres(haut, reperes, F.euros, colonnes, jours.map((j) => j.etiquette), { onmouseleave: () => voir(aujourdhui) });
   return panneau(
-    { titre: "Coût IA, 14 jours", accessoire: cout.mois && pastille(cout.mois, { neutre: true }) },
+    { titre: "Coût IA, 14 jours", accessoire: [cout.mois && pastille(cout.mois, { neutre: true }), actualiser("firebase")] },
     graphique,
     h("div", { class: "notes-cout" }, texte, h("div", { class: "note-cout" }, "Texte et voix ; la voix suit le jour UTC.")),
   );

@@ -19,7 +19,7 @@ const RECENTE_S: i64 = 7 * 86_400;
 impl Source for YouTube {
     fn id(&self) -> &'static str { "youtube" }
     fn nom(&self) -> &'static str { "YouTube" }
-    fn cadence(&self) -> i64 { 3600 }
+    fn cadence(&self) -> Option<i64> { Some(3600) }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let store = &ctx.store;

@@ -36,7 +36,7 @@ const PREMIERS_TELECHARGEMENTS: [&str; 7] = ["1", "1F", "1T", "F1", "1E", "1EP",
 impl Source for AppStoreConnect {
     fn id(&self) -> &'static str { "asc" }
     fn nom(&self) -> &'static str { "App Store Connect" }
-    fn cadence(&self) -> i64 { 60 * 60 }
+    fn cadence(&self) -> Option<i64> { Some(60 * 60) }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let suivis: Vec<&Business> =

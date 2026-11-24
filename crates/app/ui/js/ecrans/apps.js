@@ -2,7 +2,7 @@
 // et tous les classements de l'app choisie ; l'ajout et l'arrêt du suivi. Tout arrive formaté de la commande `apps` ;
 // le champ d'ajout est gardé d'un rafraîchissement à l'autre.
 
-import { h, s, panneau, rangee, segmente, pastille, vide } from "../composants.js";
+import { h, s, panneau, rangee, segmente, pastille, vide, actualiser } from "../composants.js";
 
 const v = (nom) => `var(--${nom})`;
 
@@ -125,7 +125,7 @@ function panneauCourbe(d, recharger) {
       recharger();
     },
   );
-  return panneau({ titre: "Rang sur 30 jours", accessoire: choix }, h("div", { class: "legende-courbe" }, c.legende), courbeRang(c));
+  return panneau({ titre: "Rang sur 30 jours", accessoire: [choix, actualiser("classements")] }, h("div", { class: "legende-courbe" }, c.legende), courbeRang(c));
 }
 
 function panneauDetail(d, vue) {
@@ -191,7 +191,7 @@ async function rendre(racine, ctx) {
       ),
     );
     racine.replaceChildren(
-      panneau({ titre: "Top 200", accessoire: choix }, d.lu ? table(d, vue.ctx, choisir) : vide("La source Classements n'a encore rien lu."), ajout),
+      panneau({ titre: "Top 200", accessoire: [choix, actualiser("classements")] }, d.lu ? table(d, vue.ctx, choisir) : vide("La source Classements n'a encore rien lu."), ajout),
       d.courbe && rangee([2, 1], [panneauCourbe(d, dessiner), panneauDetail(d, vue)]),
     );
   }

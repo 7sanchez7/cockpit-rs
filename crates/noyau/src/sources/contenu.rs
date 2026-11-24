@@ -37,7 +37,7 @@ pub struct Fiche {
 impl Source for Contenu {
     fn id(&self) -> &'static str { "contenu" }
     fn nom(&self) -> &'static str { "Contenu" }
-    fn cadence(&self) -> i64 { 15 * 60 }
+    fn cadence(&self) -> Option<i64> { Some(15 * 60) }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let suivis: Vec<_> = ctx.businesses.iter().filter(|b| b.config.contenu_dir.as_deref().is_some_and(|d| !d.is_empty())).collect();

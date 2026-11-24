@@ -3,7 +3,7 @@
 // variables de theme.css. La page est construite une fois : un rafraîchissement remplace les listes, jamais le champ
 // de réponse ni celui d'ajout.
 
-import { h, panneau, rangee, segmente, pastille, point, vide, pilule, caseRonde, boutonRelancer } from "../composants.js";
+import { h, panneau, rangee, segmente, pastille, point, vide, pilule, caseRonde, boutonRelancer, actualiser } from "../composants.js";
 
 const v = (nom) => `var(--${nom})`;
 const LIMITE_RETOURS = 10;
@@ -373,13 +373,13 @@ async function rendre(racine, ctx) {
   }
 
   await charger();
-  const bas = rangee([3, 2], [panneau({ titre: "Retours", accessoire: segments }, retoursCorps), groupes]);
+  const bas = rangee([3, 2], [panneau({ titre: "Retours", accessoire: [segments, actualiser("firebase")] }, retoursCorps), groupes]);
   bas.classList.add("haut");
   racine.replaceChildren(
     rangee(
       [2, 3],
       [
-        panneau({ titre: "Fils", accessoire: filsCompte }, filsCorps),
+        panneau({ titre: "Fils", accessoire: [filsCompte, actualiser("firebase")] }, filsCorps),
         panneau({ titre: "Conversation", accessoire: convEtat }, convCorps, reponse.el),
       ],
       { meneur: 1 },

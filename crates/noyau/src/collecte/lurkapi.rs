@@ -13,6 +13,8 @@ pub const REGLAGE: &str = "veille.cle_scrappeur";
 const BASE: &str = "https://api.lurkapi.com";
 /// Les reprises d'un appel en 5xx ou 429, après celles de `Http`.
 const REPRISES: u64 = 2;
+/// Les pages d'un profil lues au plus : 2 pour une médiane (20 vidéos), 8 pour retrouver une vidéo sans vues.
+const PAGES_PROFIL: i64 = 8;
 
 /// La clé LurkAPI : le réglage saisi dans Réglages d'abord, puis l'environnement, le trousseau ou Secret Manager.
 pub async fn cle(ctx: &Contexte) -> Option<String> {
@@ -77,14 +79,14 @@ pub async fn dernieres(http: &Http, cle: &str, p: Plateforme, handle: &str, n: u
     let n = n as i64;
     match p {
         Plateforme::Tiktok => {
-            let mut pages = paginer(http, cle, "/v3/tiktok/profile/videos", ("handle", handle), cursor("has_more", pages(n, 15, 2))).await?;
+            let mut pages = paginer(http, cle, "/v3/tiktok/profile/videos", ("handle", handle), cursor("has_more", pages(n, 15, PAGES_PROFIL))).await?;
             for page in &mut pages {
                 remplir_abonnes(page);
             }
             Ok(pages)
         }
         Plateforme::Instagram => {
-            let mut pages = paginer(http, cle, "/v1/instagram/user/reels", ("username", handle), Paging { champ_curseur: "end_cursor", parametre_curseur: "after", champ_plus: "has_next_page", max: pages(n, 12, 2) }).await?;
+            let mut pages = paginer(http, cle, "/v1/instagram/user/reels", ("username", handle), Paging { champ_curseur: "end_cursor", parametre_curseur: "after", champ_plus: "has_next_page", max: pages(n, 12, PAGES_PROFIL) }).await?;
             for page in &mut pages {
                 marquer_reels_profil(page, handle);
             }
@@ -182,6 +184,9 @@ mod tests {
         assert_eq!(pages(10, 20, 5), 1);
         assert_eq!(pages(40, 20, 5), 2);
         assert_eq!(pages(100, 12, 3), 3);
+        // une médiane lit 2 pages de reels, un compte avec une vidéo sans vues 8
+        assert_eq!(pages(20, 12, PAGES_PROFIL), 2);
+        assert_eq!(pages(96, 12, PAGES_PROFIL), 8);
     }
 
     #[test]

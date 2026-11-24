@@ -9,9 +9,10 @@ Comment les chiffres arrivent dans la base. Le moteur est dans `crates/noyau/src
 - échéance = début du dernier passage + `cadence` de la source (`a_echeance`) ;
 - après un passage en **erreur** ou **non configuré** (session expirée, clé absente), le délai est le plus court de `cadence` et `reprise`. `reprise` vaut `REPRISE_APRES_ECHEC` (600 s) par défaut ; Instagram la met à sa cadence de 3 h. Une source repasse ainsi au vert dès que la session revient, sans attendre sa cadence ;
 - une source sans aucun passage est due tout de suite ;
+- une source sans cadence (`cadence()` rend `None`, la veille) n'est jamais due : elle ne passe que sur demande, par `relancer(Some(id))` ;
 - une source déjà en cours n'est pas relancée (`en_cours`) ;
 - le réglage `collecte.pause = 1` (`REGLAGE_PAUSE`, menu de la barre des tâches ou commande `pause`) suspend les tours ;
-- `relancer(None)` relance tout tout de suite, `relancer(Some(id))` une seule source (Ctrl R ou ⌘R, bouton de Santé, « Tout relancer » du menu de la barre des tâches).
+- `relancer(None)` relance tout de suite toutes les sources qui ont une cadence (Ctrl R ou ⌘R, « Tout relancer » du menu de la barre des tâches), `relancer(Some(id))` une seule source, même sans cadence (bouton de Santé, « Lancer la veille »).
 
 Chaque passage écrit une ligne dans `collecte` (`Store::journal`) : `ok` avec le nombre de lignes, `erreur` avec le message (`Erreur` affichée) ou `non_configure` (gris dans Santé, pas une panne). Une erreur n'est jamais avalée : elle remonte au collecteur, qui l'écrit. Le journal va aussi sur la sortie d'erreur (`cockpit : posthog : 42 lignes en 3,1 s`), visible dans le terminal de `cargo run -p cockpit`.
 
@@ -84,7 +85,7 @@ Une source dont le dernier passage était `ok` et qui tombe en `erreur` envoie �
 pub trait Source: Send + Sync {
     fn id(&self) -> &'static str;        // "posthog" : clé du journal, préfixe des ids du fil et des tâches
     fn nom(&self) -> &'static str;       // "PostHog"
-    fn cadence(&self) -> i64;            // secondes entre deux passages réussis
+    fn cadence(&self) -> Option<i64>;    // secondes entre deux passages réussis, None : sur demande seulement
     fn reprise(&self) -> i64 { REPRISE_APRES_ECHEC }
     async fn collecte(&self, ctx: &Contexte) -> Res<usize>;   // lignes écrites
 }

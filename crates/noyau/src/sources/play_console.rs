@@ -24,7 +24,7 @@ const MOIS: i64 = 4;
 impl Source for PlayConsole {
     fn id(&self) -> &'static str { "playconsole" }
     fn nom(&self) -> &'static str { "Play Console" }
-    fn cadence(&self) -> i64 { 3 * 3600 }
+    fn cadence(&self) -> Option<i64> { Some(3 * 3600) }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let rempli = |v: &Option<String>| v.as_deref().is_some_and(|s| !s.is_empty());

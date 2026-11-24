@@ -23,7 +23,8 @@ cockpit veille mots                          les mots-clés
 cockpit veille mot ajoute <mot> [seuil] [--business id]
 cockpit veille mot retire <mot> [--business id]
 cockpit videos [n]                           nos vidéos, plus récentes d'abord
-cockpit sql \"<select>\"                       lecture seule, 50 lignes au plus";
+cockpit sql \"<select>\" [--tout] [--csv]      lecture seule ; 50 lignes coupées à 60 caractères, sauf --tout ;
+                                             --csv sort tout en CSV";
 
 fn erreur(m: &str) -> Erreur { Erreur::Commande(m.into()) }
 
@@ -205,7 +206,9 @@ fn cellule(v: &Valeur) -> String {
     }
 }
 
-fn sql(args: &Args) -> Res<()> {
+fn sql(args: &mut Args) -> Res<()> {
+    let csv = args.drapeau("--csv");
+    let tout = csv || args.drapeau("--tout");
     let requete = args.0.join(" ");
     let requete = requete.trim();
     let debut = requete.to_lowercase();
@@ -215,18 +218,27 @@ fn sql(args: &Args) -> Res<()> {
     }
     let chemin = noyau::chemins::base();
     let chemin = chemin.to_str().ok_or_else(|| erreur("chemin de la base illisible"))?;
-    let lignes = Database::ouvrir(chemin, true)?.query(requete, p![])?;
-    let Some(premiere) = lignes.first() else { println!("0 ligne"); return Ok(()) };
-    let mut colonnes: Vec<&String> = premiere.colonnes.keys().collect();
-    colonnes.sort();
-    println!("{}", colonnes.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(" | "));
-    for l in lignes.iter().take(50) {
-        println!("{}", colonnes.iter()
-            .map(|c| l.colonnes.get(*c).map(|v| ligne(Some(&cellule(v)), 60)).unwrap_or_default())
+    let (colonnes, lignes) = Database::ouvrir(chemin, true)?.tableau(requete)?;
+    if csv {
+        println!("{}", colonnes.iter().map(|c| champ_csv(c)).collect::<Vec<_>>().join(","));
+        for l in &lignes { println!("{}", l.iter().map(|v| champ_csv(&cellule(v))).collect::<Vec<_>>().join(",")); }
+        return Ok(());
+    }
+    if lignes.is_empty() { println!("0 ligne"); return Ok(()) }
+    println!("{}", colonnes.join(" | "));
+    let max = if tout { lignes.len() } else { 50 };
+    for l in lignes.iter().take(max) {
+        println!("{}", l.iter()
+            .map(|v| if tout { cellule(v).replace('\n', " ") } else { ligne(Some(&cellule(v)), 60) })
             .collect::<Vec<_>>().join(" | "));
     }
-    if lignes.len() > 50 { println!("… {} de plus", lignes.len() - 50); }
+    if lignes.len() > max { println!("… {} de plus, --tout pour tout voir", lignes.len() - max); }
     Ok(())
+}
+
+/// Un champ CSV, entre guillemets s'il le faut.
+fn champ_csv(s: &str) -> String {
+    if s.contains([',', '"', '\n', '\r']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.into() }
 }
 
 /// Lance la commande ; `Ok(false)` pour une commande inconnue.
@@ -283,6 +295,13 @@ mod tests {
         assert_eq!(ligne(Some(" a\nb "), 70), "a b");
         assert_eq!(ligne(Some("abcdef"), 4), "abc…");
         assert_eq!(ligne(None, 4), "");
+    }
+
+    #[test]
+    fn champs_csv() {
+        assert_eq!(champ_csv("a"), "a");
+        assert_eq!(champ_csv("a,b"), "\"a,b\"");
+        assert_eq!(champ_csv("dit \"oui\""), "\"dit \"\"oui\"\"\"");
     }
 
     #[test]

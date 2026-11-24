@@ -5,15 +5,15 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum Dimension {
     Loin, Langue, Maternelle, Source, Age, Motivation, Blocage, Interet, Niveau, Tuteur, Notifs, Compte, Pays,
-    Version, Build, Produit, Zone,
+    Version, Build, Produit, Plateforme, Zone,
 }
 
 use Dimension::*;
 
 impl Dimension {
-    pub const TOUTES: [Dimension; 17] = [
+    pub const TOUTES: [Dimension; 18] = [
         Loin, Langue, Maternelle, Source, Age, Motivation, Blocage, Interet, Niveau, Tuteur, Notifs, Compte, Pays,
-        Version, Build, Produit, Zone,
+        Version, Build, Produit, Plateforme, Zone,
     ];
 
     /// Celles qu'on lit dans les événements ; `zone` se déduit du pays.
@@ -26,7 +26,7 @@ impl Dimension {
             Loin => "loin", Langue => "langue", Maternelle => "maternelle", Source => "source", Age => "age",
             Motivation => "motivation", Blocage => "blocage", Interet => "interet", Niveau => "niveau",
             Tuteur => "tuteur", Notifs => "notifs", Compte => "compte", Pays => "pays", Version => "version",
-            Build => "build", Produit => "produit", Zone => "zone",
+            Build => "build", Produit => "produit", Plateforme => "plateforme", Zone => "zone",
         }
     }
 
@@ -37,7 +37,8 @@ impl Dimension {
             Loin => "Écran atteint", Langue => "Langue apprise", Maternelle => "Langue maternelle", Source => "Connu par",
             Age => "Âge", Motivation => "Motivation", Blocage => "Ce qui bloque", Interet => "Centres d'intérêt",
             Niveau => "Niveau de départ", Tuteur => "Tuteur choisi", Notifs => "Notifications", Compte => "Compte lié",
-            Pays => "Pays", Version => "Version de l'app", Build => "Build", Produit => "Offre prise", Zone => "Zone",
+            Pays => "Pays", Version => "Version de l'app", Build => "Build", Produit => "Offre prise",
+            Plateforme => "Plateforme", Zone => "Zone",
         }
     }
 
@@ -88,6 +89,6 @@ mod tests {
         assert_eq!(Dimension::zone("JP"), Some("asie"));
         assert_eq!(Dimension::zone("AU"), Some("oceanie"));
         assert_eq!(Dimension::zone("AQ"), None);
-        assert_eq!(Dimension::lues().count(), 16);
+        assert_eq!(Dimension::lues().count(), 17);
     }
 }

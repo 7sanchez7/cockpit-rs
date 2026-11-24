@@ -24,9 +24,11 @@
 //   avatar(business | null, { mini }), miniature(cles, { plateforme, largeur, hauteur, rayon })
 //   ligneFil(evenement, { jour }), caseRonde({ faite, alerte, quandClic })
 //   boutonRelancer(enCours, quandClic)   relance une source (Santé, SAV)
+//   actualiser(...sources)          rafraîchit les seules sources d'un panneau (RESEAUX : les quatre réseaux) ; jamais la veille
+//   suivreCollecte(sources, enCours)   app.js donne l'état de la collecte ; les boutons actualiser affichés suivent
 
 import * as F from "./format.js";
-import { image, lien } from "./pont.js";
+import { appeler, image, lien } from "./pont.js";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -180,6 +182,7 @@ const ICONES = {
   envoyer: ["path d=M12,19V5", "path d=M6,11l6-6,6,6"],
   info: ["circle cx=12 cy=12 r=9", "path d=M12,11v5", "path d=M12,8v.5"],
   plus: ["path d=M12,5v14M5,12h14"],
+  poubelle: ["path d=M4,7h16", "path d=M9,7V4h6v3", "path d=M6,7l1,13h10l1-13", "path d=M10,11v5M14,11v5"],
 };
 
 export function icone(nom) {
@@ -576,4 +579,61 @@ export function boutonRelancer(enCours, quandClic) {
     icone("relancer"),
     enCours ? "En cours" : "Relancer",
   );
+}
+
+// le bouton de chaque panneau
+
+export const RESEAUX = ["tiktok", "instagram", "youtube", "facebook"];
+
+// la collecte vue par la barre : [{ id, nom, passage }], les ids en cours, et par id les clics encore dans leur tour minimum
+const collecte = { sources: [], enCours: new Set(), clics: new Map() };
+// la barre ne voit pas une source qui finit en moins de 400 ms : l'icône tourne au moins ce temps après un clic
+const TOUR_MINIMUM = 2000;
+
+export function suivreCollecte(sources, enCours) {
+  collecte.sources = sources;
+  collecte.enCours = new Set(enCours);
+  majActualisers();
+}
+
+function majActualisers() {
+  for (const el of document.querySelectorAll(".actualiser")) majActualiser(el);
+}
+
+function compterClics(sources, pas) {
+  for (const id of sources) collecte.clics.set(id, (collecte.clics.get(id) ?? 0) + pas);
+  majActualisers();
+}
+
+const tourneSource = (id) => collecte.enCours.has(id) || collecte.clics.get(id) > 0;
+
+/** Relance les sources qui nourrissent un panneau ; tourne tant que l'une d'elles est en cours. */
+export function actualiser(...sources) {
+  const el = h(
+    "button",
+    {
+      class: "bouton-panneau survolable actualiser",
+      "data-sources": sources.join(" "),
+      onclick: () => {
+        compterClics(sources, 1);
+        setTimeout(() => compterClics(sources, -1), TOUR_MINIMUM);
+        Promise.all(sources.map((source) => appeler("relancer", { source }))).catch(console.error);
+      },
+    },
+    icone("relancer"),
+  );
+  majActualiser(el);
+  return el;
+}
+
+function majActualiser(el) {
+  const ids = el.dataset.sources.split(" ");
+  const tourne = ids.some(tourneSource);
+  el.classList.toggle("tourne", tourne);
+  el.disabled = tourne;
+  const maintenant = Date.now();
+  const lues = collecte.sources
+    .filter((s) => ids.includes(s.id))
+    .map((s) => s.nom + " " + (tourneSource(s.id) ? "en cours" : s.passage ? F.ilYa(s.passage.fin, maintenant) : "jamais lue"));
+  el.title = "Rafraîchir ce panneau\n" + lues.join("\n");
 }

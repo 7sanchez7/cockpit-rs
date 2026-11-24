@@ -154,18 +154,28 @@ impl Database {
         while let Some(r) = rows.next()? {
             let mut colonnes = HashMap::with_capacity(noms.len());
             for (k, nom) in noms.iter().enumerate() {
-                let v = match r.get_ref(k)? {
-                    ValueRef::Null => continue,
-                    ValueRef::Integer(v) => Valeur::Int(v),
-                    ValueRef::Real(v) => Valeur::Reel(v),
-                    ValueRef::Text(t) => Valeur::Texte(String::from_utf8_lossy(t).into_owned()),
-                    ValueRef::Blob(b) => Valeur::Blob(b.to_vec()),
-                };
-                colonnes.insert(nom.clone(), v);
+                match valeur(r.get_ref(k)?) {
+                    Valeur::Null => {}
+                    v => { colonnes.insert(nom.clone(), v); }
+                }
             }
             lignes.push(Ligne { colonnes });
         }
         Ok(lignes)
+    }
+
+    /// Les noms des colonnes dans l'ordre du select, puis les lignes, NULL compris : pour afficher une requête libre.
+    pub fn tableau(&self, sql: &str) -> Res<(Vec<String>, Vec<Vec<Valeur>>)> {
+        let g = self.interne.lock();
+        let i = g.borrow();
+        let mut stmt = i.conn.prepare(sql)?;
+        let noms: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+        let mut rows = stmt.query([])?;
+        let mut lignes = Vec::new();
+        while let Some(r) = rows.next()? {
+            lignes.push((0..noms.len()).map(|k| r.get_ref(k).map(valeur)).collect::<Result<_, _>>()?);
+        }
+        Ok((noms, lignes))
     }
 
     pub fn colonne_existe(&self, table: &str, colonne: &str) -> Res<bool> {
@@ -195,5 +205,15 @@ impl Database {
                 Err(e)
             }
         }
+    }
+}
+
+fn valeur(v: ValueRef) -> Valeur {
+    match v {
+        ValueRef::Null => Valeur::Null,
+        ValueRef::Integer(v) => Valeur::Int(v),
+        ValueRef::Real(v) => Valeur::Reel(v),
+        ValueRef::Text(t) => Valeur::Texte(String::from_utf8_lossy(t).into_owned()),
+        ValueRef::Blob(b) => Valeur::Blob(b.to_vec()),
     }
 }

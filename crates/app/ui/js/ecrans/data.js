@@ -1,36 +1,52 @@
-// Data : toute la data de l'app sur la période (l'argent, l'acquisition, la conversion, l'arbre des installs, la
-// rétention, l'usage). Un build choisi remplace la période : la conversion, l'arbre et la rétention de ses installs.
-// Tout arrive écrit par la commande `data` ; l'arbre lit la sienne.
+// Data : deux vues, l'app et l'argent. L'app : l'arbre des installs et les ronds de chaque nœud, puis la rétention, le
+// rond et le bilan de la période ; un build choisi la remplace par l'arbre et la rétention de ses installs. L'argent : le revenu de la période, qui ne se découpe pas par build. Tout arrive écrit par la commande
+// `data` ; l'arbre lit la sienne.
 
-import { h, grilleKpi, rangee, bloc, panneau, enTetePanneau, pastille, courbe, barres, ligneFil, vide, segmente, rendu } from "../composants.js";
+import { h, grilleKpi, rangee, bloc, panneau, enTetePanneau, pastille, courbe, barres, ligneFil, vide, segmente, rendu, actualiser } from "../composants.js";
 import * as F from "../format.js";
 import { etat } from "./app/etat.js";
-import { choixBoutique, piluleMenu, carteKpi, taux } from "./app/outils.js";
+import { choixBoutique, piluleMenu, carteKpi } from "./app/outils.js";
 import { arbre } from "./data/arbre.js";
+
+const MODES = [
+  { id: "app", libelle: "App" },
+  { id: "argent", libelle: "Argent" },
+];
 
 let dernier = null;
 
 async function rendre(racine, ctx) {
-  const vue = await ctx.appeler("data", { business: ctx.business, periode: etat.periode, build: etat.build });
+  const app = etat.mode === "app";
+  const vue = await ctx.appeler("data", { business: ctx.business, periode: etat.periode, build: app ? etat.build : null });
   dernier = { racine, ctx };
   // un build absent de ce business retombe sur la période
-  etat.build = vue.build;
+  if (app) etat.build = vue.build;
   ctx.page.sousTitre(vue.sousTitre);
   ctx.page.outils(
-    choixBoutique(ctx, vue.boutique),
-    choixBuild(vue),
-    segmente(vue.periodes, vue.periode, (p) => choisir(p, null)),
+    ...[
+      segmente(MODES, etat.mode, changerMode),
+      choixBoutique(ctx, vue.boutique),
+      app && choixBuild(vue),
+      // en vue Argent, la période ne fait pas oublier le build de la vue App
+      segmente(vue.periodes, vue.periode, (p) => choisir(p, app ? null : etat.build)),
+    ].filter(Boolean),
   );
-  const a = await arbre(ctx, vue.arbre);
-  const arbreSection = [titreSection("Arbre des installs", vue.arbre.texte), a];
-  racine.replaceChildren(
-    ...(vue.build
-      ? [conversion(vue.conversion), arbreSection, retention(vue.retention)]
-      : [argent(vue.argent), section(vue.acquisition), conversion(vue.conversion), arbreSection, retention(vue.retention), section(vue.usage)]
-    )
-      .flat(Infinity)
-      .filter(Boolean),
-  );
+  const sections = app
+    ? [
+        titreSection("Arbre des installs", vue.arbre.texte, ["posthog", "revenuecat"]),
+        await arbre(ctx, vue.arbre),
+        retention(vue.retention),
+        // null tant que les événements manquent, ou en vue build
+        vue.rond && section(vue.rond, ["posthog"]),
+        vue.bilan && section(vue.bilan, ["posthog"]),
+      ]
+    : argent(vue.argent);
+  racine.replaceChildren(...sections.flat(Infinity).filter(Boolean));
+}
+
+function changerMode(mode) {
+  etat.mode = mode;
+  choisir(null, etat.build);
 }
 
 function choisir(periode, build) {
@@ -49,20 +65,26 @@ function choixBuild(vue) {
   ]);
 }
 
-function titreSection(titre, texte) {
-  return h("div", { class: "titre-data" }, h("span", { class: "titre" }, titre), h("span", { class: "texte" }, texte));
+/** sources : celles que relance le bouton de la section. */
+function titreSection(titre, texte, sources) {
+  return h(
+    "div",
+    { class: "titre-data" },
+    h("div", { class: "titre-ligne" }, h("span", { class: "titre" }, titre), h("div", { class: "espace" }), actualiser(...sources)),
+    h("span", { class: "texte" }, texte),
+  );
 }
 
 /** Le titre de la section et ses cartes. */
-function section(s) {
+function section(s, sources) {
   const grille = grilleKpi(...s.kpis.map((c, i) => carteKpi(c, `data.${s.titre}.${i}`)));
-  if (s.kpis.length === 3) grille.classList.add("trois");
-  return [titreSection(s.titre, s.texte), grille];
+  if ([3, 6].includes(s.kpis.length)) grille.classList.add("trois");
+  return [titreSection(s.titre, s.texte, sources), grille];
 }
 
 function argent(a) {
   return [
-    section(a.section),
+    section(a.section, ["revenuecat", "firebase"]),
     objectif(a.objectif),
     rangee(
       [2, 1],
@@ -70,11 +92,11 @@ function argent(a) {
         h(
           "div",
           { class: "pile" },
-          bloc(enTetePanneau("MRR"), courbe({ series: [{ nom: "MRR", valeurs: a.mrr.valeurs, couleur: "var(--accent)" }], etiquettes: a.mrr.etiquettes, format: (v) => F.entier(v) + " €", hauteur: "var(--t-graphique-haut)" })),
-          bloc(enTetePanneau("Achats par jour"), barres(a.achats.valeurs, { courante: a.achats.courante, axe: a.achats.axe, aide: (i) => a.achats.aides[i], hauteur: "var(--t-graphique-haut)" })),
+          bloc(enTetePanneau("MRR", actualiser("revenuecat")), courbe({ series: [{ nom: "MRR", valeurs: a.mrr.valeurs, couleur: "var(--accent)" }], etiquettes: a.mrr.etiquettes, format: (v) => F.entier(v) + " €", hauteur: "var(--t-graphique-haut)" })),
+          bloc(enTetePanneau("Achats par jour", actualiser("revenuecat")), barres(a.achats.valeurs, { courante: a.achats.courante, axe: a.achats.axe, aide: (i) => a.achats.aides[i], hauteur: "var(--t-graphique-haut)" })),
         ),
         bloc(
-          enTetePanneau("Achats et essais", h("span", { class: "accessoire-texte" }, a.ventes.compte)),
+          enTetePanneau("Achats et essais", h("span", { class: "accessoire-texte" }, a.ventes.compte), actualiser("revenuecat", "posthog")),
           a.ventes.evenements.length ? h("div", { class: "fil" }, a.ventes.evenements.map((e) => ligneFil(e, { jour: true }))) : vide("Aucun achat ni essai dans le fil sur la période."),
         ),
       ],
@@ -84,38 +106,20 @@ function argent(a) {
 }
 
 function objectif(o) {
-  if (!o) return panneau({ titre: "Objectif" }, vide("RevenueCat n'a pas encore écrit le MRR du jour."));
+  if (!o) return panneau({ titre: "Objectif", accessoire: actualiser("revenuecat") }, vide("RevenueCat n'a pas encore écrit le MRR du jour."));
   return panneau(
-    { titre: o.titre, accessoire: pastille(o.pourcent, { couleur: "var(--accent)" }), classe: "objectif" },
+    { titre: o.titre, accessoire: [pastille(o.pourcent, { couleur: "var(--accent)" }), actualiser("revenuecat")], classe: "objectif" },
     h("div", { class: "objectif-ligne" }, h("span", { class: "objectif-mrr" }, o.mrr), h("span", { class: "objectif-de" }, "de MRR"), h("div", { class: "espace" }), h("span", { class: "objectif-reste" }, o.reste)),
     h("div", { class: "objectif-jauge verre capsule" }, h("i", { style: { "--part": Math.min(Math.max(o.part, 0), 1) } })),
     o.rythme && h("div", { class: "objectif-rythme" }, o.rythme),
   );
 }
 
-function conversion(c) {
-  return [section(c.section), c.portes && portes(c.portes)];
-}
-
-function portes(lignes) {
-  return bloc(
-    enTetePanneau("Portes du paywall", h("span", { class: "accessoire-texte" }, "d'où il s'ouvre")),
-    lignes.length
-      ? h(
-          "div",
-          { class: "table-portes" },
-          ["Porte", "Vues", "Essais", "Directs", "Conv."].map((t) => h("span", { class: "entete-table" }, t)),
-          lignes.map((p) => [h("span", { class: "nom" }, p.nom), h("span", null, p.vues), h("span", null, p.essais), h("span", null, p.directs), taux(p.conversion)]),
-        )
-      : vide("Aucune vue du paywall sur la période."),
-  );
-}
-
 function retention(r) {
   return [
-    section(r.section),
+    section(r.section, ["posthog"]),
     bloc(
-      enTetePanneau("Cohortes", h("span", { class: "accessoire-texte" }, r.sousTitre)),
+      enTetePanneau("Cohortes", h("span", { class: "accessoire-texte" }, r.sousTitre), actualiser("posthog")),
       r.cohortes.length
         ? h(
             "div",

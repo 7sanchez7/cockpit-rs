@@ -557,6 +557,25 @@ mod tests {
     }
 
     #[test]
+    fn conversation_supprimee() {
+        let s = Store::memoire().unwrap();
+        let a = creer(&s, "roleo", "première", None).unwrap();
+        let suite = creer(&s, "roleo", "suite", Some(&a.fil)).unwrap();
+        let autre = creer(&s, "roleo", "autre", None).unwrap();
+        let mut t = Trouvaille::nouvelle(Plateforme::Tiktok, "1", "a");
+        t.vues = Some(50_000);
+        s.trouvaille(&t, "roleo", None, &a.debut).unwrap();
+        let video = s.videos_veille("", p![]).unwrap().remove(0).id;
+        s.retenir_video(&suite.id, &video, "gardée").unwrap();
+        s.supprimer_fil(&a.fil).unwrap();
+        assert!(s.demande_veille(&a.id).unwrap().is_none() && s.demande_veille(&suite.id).unwrap().is_none());
+        assert!(s.demande_veille(&autre.id).unwrap().is_some());
+        // la vidéo reste dans la bank, sans plus rien qui la retienne
+        assert_eq!(s.videos_veille("", p![]).unwrap().len(), 1);
+        assert_eq!(s.db.query("select count(*) as n from veille_retenue", p![]).unwrap()[0].entier("n"), Some(0));
+    }
+
+    #[test]
     fn demande_en_base() {
         let s = Store::memoire().unwrap();
         assert!(creer(&s, "roleo", "   ", None).is_err());

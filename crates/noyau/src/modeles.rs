@@ -373,12 +373,23 @@ pub struct Install {
     pub paywall: bool,
     pub essai: bool,
     pub direct: bool,
+    pub commence: bool,
     pub rond: bool,
     pub j1: bool,
     pub j7: bool,
     pub j14: bool,
     pub j30: bool,
     pub client: Option<String>,
+    /// La personne PostHog, pour joindre ses événements (table `evenement`).
+    pub personne: String,
+    pub commences: i64,
+    pub ronds: i64,
+    /// Jours de Paris avec au moins un rond fini.
+    pub jours_ronds: i64,
+    /// Secondes de l'install au premier rond.
+    pub premier_rond: Option<i64>,
+    /// Jour de Paris du dernier rond fini.
+    pub dernier_rond: Option<String>,
     pub valeurs: BTreeMap<crate::dimension::Dimension, Vec<String>>,
 }
 
@@ -393,6 +404,24 @@ impl EtatPaiement {
     pub fn depuis(s: &str) -> Option<EtatPaiement> {
         [EtatPaiement::Paye, EtatPaiement::Essai, EtatPaiement::Non, EtatPaiement::Inconnu].into_iter().find(|e| e.brut() == s)
     }
+}
+
+/// Un événement de l'app gardé tel quel (table `evenement`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct EvenementApp {
+    pub uuid: String,
+    pub personne: String,
+    /// Instant de l'événement, ISO UTC.
+    pub at: String,
+    /// Jour de Paris.
+    pub jour: String,
+    pub nom: String,
+    pub plateforme: String,
+    pub build: String,
+    /// Les propriétés hors `$…`, en objet JSON.
+    pub props: String,
+    /// Arrivée chez PostHog, en millisecondes Unix : le curseur de la collecte.
+    pub recu_ms: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]

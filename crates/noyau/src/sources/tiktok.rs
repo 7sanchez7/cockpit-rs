@@ -33,7 +33,7 @@ const RECENTE_S: i64 = 14 * 86_400;
 impl Source for TikTok {
     fn id(&self) -> &'static str { "tiktok" }
     fn nom(&self) -> &'static str { "TikTok" }
-    fn cadence(&self) -> i64 { 30 * 60 }
+    fn cadence(&self) -> Option<i64> { Some(30 * 60) }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let store = &ctx.store;

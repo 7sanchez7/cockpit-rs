@@ -432,10 +432,25 @@ impl Store {
             for i in lignes {
                 let valeurs: BTreeMap<&str, &Vec<String>> = i.valeurs.iter().map(|(d, v)| (d.brut(), v)).collect();
                 self.db.execute("
-                    insert into install (business, jour, loin, paywall, essai, direct, rond, j1, j7, j14, j30, client, valeurs)
-                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    p![business, &i.jour, i.loin, i.paywall, i.essai, i.direct, i.rond, i.j1, i.j7, i.j14, i.j30, &i.client,
-                       serde_json::to_string(&valeurs)?])?;
+                    insert into install (business, jour, loin, paywall, essai, direct, commence, rond, j1, j7, j14, j30, client,
+                        personne, commences, ronds, jours_ronds, premier_rond, dernier_rond, valeurs)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    p![business, &i.jour, i.loin, i.paywall, i.essai, i.direct, i.commence, i.rond, i.j1, i.j7, i.j14, i.j30, &i.client,
+                       (!i.personne.is_empty()).then_some(&i.personne), i.commences, i.ronds, i.jours_ronds, i.premier_rond,
+                       &i.dernier_rond, serde_json::to_string(&valeurs)?])?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Ajoute des événements de l'app ; un événement relu (même uuid) remplace l'ancien.
+    pub fn evenements_app(&self, business: &str, lignes: &[EvenementApp]) -> Res<()> {
+        self.lot(|| {
+            for e in lignes {
+                self.db.execute("
+                    insert or replace into evenement (business, uuid, personne, at, jour, nom, plateforme, build, props)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    p![business, &e.uuid, &e.personne, &e.at, &e.jour, &e.nom, &e.plateforme, &e.build, &e.props])?;
             }
             Ok(())
         })
