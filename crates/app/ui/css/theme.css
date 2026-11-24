@@ -96,7 +96,6 @@
   --t-avatar-mini: 26px;
   --t-logo-mini: 12px;
   --t-logo: 16px;
-  --t-logo-grand: 20px;
   --t-bouton: 34px;
   --t-segment: 30px;
   --t-ligne-fil: 30px;
@@ -124,8 +123,6 @@
   --t-rail: 52px;
   --t-radar: 156px;
   --t-jauge: 6px;
-  --t-curseur: 120px;
-  --t-poignee: 14px;
   --t-conversation: 460px;
   --t-reponse: 88px;
   --t-reglages-l: 600px;
@@ -222,28 +219,6 @@
   --t-nom-part: 112px;
   --t-valeur-part: 40px;
   --t-barre-part: 6px;
-  --t-carte-survol: 300px;
-  --t-barre-anatomie: 8px;
-  --t-fiche-l: 1040px;
-  --t-fiche-h: 760px;
-  --t-tuile-fiche: 120px;
-  --t-similaire: 76px;
-  --part-video-fiche: 42%;
-  --f-engagement: 600 44px/1 var(--police);
-  --delai-survol: 300ms;
-  --delai-fermeture: 150ms;
-  --t-filtres: 280px;
-  --t-ligne-facette: 20px;
-  --t-popover-mots: 420px;
-  --t-liste-mots: 240px;
-  --t-fils: 232px;
-  --t-chat: 780px;
-  --t-chat-accueil: 520px;
-  --t-bulle-moi: 80%;
-  --t-saisie-max: 168px;
-  --t-avatar-claude: 24px;
-  --t-avatar-claude-grand: 52px;
-  --retrait-reponse: calc(var(--t-avatar-claude) + var(--e-m));
 }
 
 @media (prefers-reduced-motion: reduce) {

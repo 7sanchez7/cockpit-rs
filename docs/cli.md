@@ -30,7 +30,7 @@ cargo run -p cockpit-cli -- etat     # sans installer
 
 Sans argument, la CLI affiche l'aide. Une commande inconnue affiche l'aide avec le code 1.
 
-**Écritures** : les mots-clés de la veille, par `Store` comme le fera l'écran Veille. Mais chaque commande, `sql` compris, ouvre d'abord la base par `Store::ouvrir()`, comme l'app : schéma créé ou complété, graine appliquée si le fichier a changé ([`collecte.md`](collecte.md) § Graine), passages de `collecte` de plus de 30 jours effacés.
+**Écritures** : les mots-clés de la veille, par `Store`. Mais chaque commande, `sql` compris, ouvre d'abord la base par `Store::ouvrir()`, comme l'app : schéma créé ou complété, graine appliquée si le fichier a changé ([`collecte.md`](collecte.md) § Graine), passages de `collecte` de plus de 30 jours effacés.
 
 **Sorties** : nombres compacts (`25,4 k`, `lecture::format`), âges courts (`40 min`, `5 h`, `3 j`), textes coupés à une ligne avec `…`. Une exception au format français : `sql` écrit les réels comme la version Swift (`3.0`, `0.5`, `16 bytes` pour un blob). Une erreur sort sur stderr, « cockpit : … », avec le code 1.
 

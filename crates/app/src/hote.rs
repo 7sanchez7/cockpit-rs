@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::webview::{Cookie, PageLoadEvent};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Webview, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::Notify;
 
@@ -62,7 +62,7 @@ impl Pages {
 
 impl HoteApp {
     /// Une WebView de l'app, qui donne accès au magasin de cookies commun.
-    fn vue(&self) -> Option<WebviewWindow> { self.app.webview_windows().into_values().next() }
+    fn vue(&self) -> Option<Webview> { self.app.webviews().into_values().next() }
 
     fn cookies_app(&self, domaine: &str, requis: &str) -> Res<HashMap<String, String>> {
         let vue = self.vue().ok_or_else(|| Erreur::NonConfigure("aucune fenêtre ouverte pour lire les sessions".into()))?;

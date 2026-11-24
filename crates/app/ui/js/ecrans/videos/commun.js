@@ -1,4 +1,4 @@
-// Ce que partagent Vidéos et Veille : le menu du clic droit, le popover d'ajout, la case 9:16 d'une vidéo, le
+// Les briques de l'écran Vidéos : le menu du clic droit, le popover d'ajout, la case 9:16 d'une vidéo, le
 // choix du business d'un ajout et le remplacement du contenu qui garde le défilement des colonnes.
 
 import { h, jeton, logoPlateforme, miniature, nombreJeton, sobre } from "../../composants.js";

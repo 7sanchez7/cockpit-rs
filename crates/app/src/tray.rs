@@ -69,7 +69,7 @@ pub fn creer(app: &AppHandle) -> tauri::Result<()> {
 
 /// Montre la fenêtre principale, cachée par sa fermeture.
 pub fn montrer(app: &AppHandle) {
-    if let Some(f) = app.get_webview_window("main") {
+    if let Some(f) = app.get_window("main") {
         if let Err(e) = f.show().and_then(|_| f.unminimize()).and_then(|_| f.set_focus()) {
             eprintln!("fenêtre : {e}");
         }

@@ -7,7 +7,7 @@ index.html          charge les trois feuilles et js/app.js
 css/theme.css       tous les jetons : couleurs, rayons, espaces, tailles, polices, ressorts, durées
 css/composants.css  les composants partagés
 css/app.css         la barre du haut, la zone d'écran, la palette, les toasts
-js/pont.js          appeler, ecouter, lien, image, fichier, toast, fenetre
+js/pont.js          appeler, ecouter, lien, image, toast, fenetre
 js/format.js        nombres, argent, dates (heure de Paris) au format français
 js/composants.js    h(), animations, composants
 js/palette.js       la palette ⌘K (Ctrl+K hors Mac)
@@ -48,7 +48,7 @@ Le contexte :
 | Champ | |
 |---|---|
 | `appeler(cmd, args)` | une commande Rust ; l'erreur s'affiche en toast puis se relance |
-| `lien(url)`, `image(cle)`, `fichier(chemin)` | ouvrir une adresse ; l'url d'une image du cache (`icone:<appId>`) ; l'url d'un fichier du cache rendu par une commande (une vidéo de la Veille) |
+| `lien(url)`, `image(cle)` | ouvrir une adresse ; l'url d'une image du cache (`icone:<appId>`) |
 | `aller(id)` | changer d'écran |
 | `montrer(genre, id)` | ouvrir l'écran qui montre ce résultat, sur lui (`video`, `app`, `tache`), comme la palette |
 | `business`, `businesses` | l'id choisi (null pour « Tous ») ; `[{ id, nom, lettre, teinte, appStoreId }]` |

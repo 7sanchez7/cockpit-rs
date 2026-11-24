@@ -352,7 +352,7 @@ Retirer un mot supprime sa ligne seulement : ses vidéos restent.
 | `entree`, `sortie` | tokens facturés ; `entree` compte tout le prompt, cache écrit et lu compris |
 | `usd` | coût de l'appel, au prix de chaque sorte de token (`Usage::usd`) ; `depense_veille_usd` en fait la somme |
 
-Une demande à Claude depuis l'écran Veille ([`sources/veille.md`](sources/veille.md) § La demande). Ces deux tables n'existent que dans la version Rust : l'app Swift les ignore.
+Une demande à Claude, lancée depuis l'ancien écran Veille ([`sources/veille.md`](sources/veille.md) § La demande). Ces deux tables n'existent que dans la version Rust : l'app Swift les ignore.
 
 | `veille_demande` | Contenu |
 |---|---|

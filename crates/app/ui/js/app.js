@@ -1,14 +1,14 @@
 // La racine du Cockpit : barre du haut, écrans, raccourcis, palette, rafraîchissement.
 //
 // Un écran est un module ecrans/<id>.js qui exporte par défaut :
-//   { titre, sousTitre, rendre(racine, ctx), defile?: false, business?: false }
+//   { titre, sousTitre, rendre(racine, ctx), quitter?(), defile?: false, business?: false }
 // rendre (synchrone ou async) remplit `racine`, le contenu sous l'en-tête : construire, puis racine.replaceChildren(...) d'un coup.
 // Il est rappelé, en mode calme, à chaque nouvelle version de la base, au changement de business et toutes les 30 s.
+// quitter, s'il existe, est appelé quand on change d'écran (la Veille y cache sa vue native).
 //
 // ctx :
 //   appeler(cmd, args)       une commande Rust ; l'erreur s'affiche en toast puis se relance
 //   lien(url), image(cle)    ouvrir une adresse ; l'url d'une image du cache (`icone:<appId>`, `avatar:<compte>`)
-//   fichier(chemin)          l'url d'un fichier du cache rendu par une commande (une vidéo de la Veille)
 //   aller(ecran)             changer d'écran
 //   montrer(genre, id)       ouvrir l'écran qui montre une vidéo, une app ou une tâche, sur elle (comme la palette)
 //   business                 l'id du business choisi, null pour « Tous »
@@ -21,7 +21,7 @@
 //   page.sousTitre(texte), page.outils(...noeuds)   l'en-tête de la page
 //   abonner(fn) -> arrêt     fn(ctx) remplace le re-rendu complet tant que l'écran est affiché
 
-import { appeler, ecouter, lien, image, fichier, fenetre, toast } from "./pont.js";
+import { appeler, ecouter, lien, image, fenetre, toast } from "./pont.js";
 import { h, remplacer, icone, marque, avatar, point, surtitre, segmente, glisseur, entree, rendu, sobre, jeton, nombreJeton, suivreCollecte } from "./composants.js";
 import * as F from "./format.js";
 import { ouvrirPalette } from "./palette.js";
@@ -219,7 +219,6 @@ function contexte(rafraichi) {
     appeler,
     lien,
     image: (cle) => image(f.miniatures, cle),
-    fichier,
     aller,
     montrer: (genre, id) => montrerTrouve({ genre, id }),
     business: etat.business,
@@ -307,6 +306,7 @@ function aller(id) {
     const module = (await import(`./ecrans/${id}.js`)).default;
     const avance = !courant || rang(id) >= rang(courant.id);
     const ancien = courant?.el;
+    courant?.module.quitter?.();
     etat.ecran = id;
     if (rang(id) < NAVIGATION) regler("ecran", id);
     courant = { id, module, abonnes: new Set(), ...construirePage(module) };
