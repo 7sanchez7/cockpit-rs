@@ -55,7 +55,6 @@ La dictée est le compteur `s` d'`aiLoad`, en ms d'audio transcrites par Inworld
 - Les lectures du cache d'Anthropic ne sont pas dans `tk`.
 - La reprise chez un autre fournisseur passe par le même compteur `tk` : ses tokens sont comptés au prix de Haiku. C'est un ordre de grandeur, pas la facture.
 - L'infra Google, RevenueCat, la commission des stores.
-- Les analyses de la [Veille](veille.md) : elles ont leur propre compte, en dollars, dans `veille_cout`.
 
 ## Quand le modèle ou les prix changent
 

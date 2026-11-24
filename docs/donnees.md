@@ -6,7 +6,7 @@ Une base SQLite locale, `cockpit.sqlite`, dans le dossier des données ([`collec
 |---|---|---|
 | base | `~/Library/Application Support/Cockpit/cockpit.sqlite` | `%APPDATA%\Cockpit\cockpit.sqlite` |
 
-Les sources l'écrivent, les écrans la lisent, rien d'autre. Le schéma est dans `crates/noyau/src/schema.rs`, identique à celui de la version Swift : sur Mac, les deux apps ouvrent la même base. Les écritures sont dans `crates/noyau/src/store.rs` (`Store`) et `crates/noyau/src/store_veille.rs`, les modèles dans `crates/noyau/src/modeles.rs`, les noms des métriques dans `crates/noyau/src/metrique.rs`.
+Les sources l'écrivent, les écrans la lisent, rien d'autre. Le schéma est dans `crates/noyau/src/schema.rs`, identique à celui de la version Swift : sur Mac, les deux apps ouvrent la même base. Les écritures sont dans `crates/noyau/src/store.rs` (`Store`), les modèles dans `crates/noyau/src/modeles.rs`, les noms des métriques dans `crates/noyau/src/metrique.rs`.
 
 Pas de migrations : une table s'ajoute dans `schema::SQL` avec `create table if not exists`, une colonne dans `schema::COLONNES` (table, colonne, définition), ajoutée au lancement si `colonne_existe` dit qu'elle manque. Une colonne nouvelle a une valeur par défaut. Effacer la base est sans risque : la collecte suivante la remplit, seul l'historique accumulé (MRR jour par jour, relevés de vidéos, rangs) est perdu.
 
@@ -98,7 +98,7 @@ Le fil « En direct » : ce qui vient de se passer. Une source ajoute une ligne 
 |---|---|
 | `id` | clé stable, `posthog:essai:<uuid>` |
 | `business`, `at` | qui, quand (l'heure de l'événement, pas celle de la collecte) |
-| `type` | `TypeFil::brut` : `ESSAI`, `ACHAT`, `AVIS`, `MSG`, `RETOUR`, `VIDEO`, `RANG`, `IA`, `VERSION`, `VEILLE` |
+| `type` | `TypeFil::brut` : `ESSAI`, `ACHAT`, `AVIS`, `MSG`, `RETOUR`, `VIDEO`, `RANG`, `IA`, `VERSION` ; les anciennes lignes `VEILLE` restent en base et ne se lisent plus (`TypeFil::depuis` rend `None`) |
 | `texte` | une ligne lisible, `Essai annuel, Belgique` |
 | `lien` | URL à ouvrir au clic, facultative |
 
@@ -304,72 +304,9 @@ where i.business = 'roleo' and i.jour = '2026-11-20' and i.essai = 1 order by e.
 ```
 
 Les jours avant `posthog.evenements.depuis.<business>` (§ `reglage`) ne sont pas complets : l'écran Data n'y lit rien.
-### `veille_mot`, `veille_compte`, `veille_video`, `veille_releve`, `veille_analyse`, `veille_cout`, `veille_demande` et `veille_retenue`
+### `veille_*`
 
-La veille par mots-clés, à part des tables `compte` et `video` : les comptes trouvés ne sont pas suivis, leurs vidéos ne sont pas les nôtres. Écrite par la source Veille ([`sources/veille.md`](sources/veille.md)), par `crates/noyau/src/store_veille.rs`, les modèles dans `crates/noyau/src/modeles_veille.rs`.
-
-| `veille_mot` | Contenu |
-|---|---|
-| `business`, `mot` | clé primaire (`ajouter_mot`, `retirer_mot`, `activer_mot`) |
-| `vues_min` | seuil de vues pour garder une vidéo, 20 000 par défaut |
-| `actif` | 0 = en pause |
-| `ajoute`, `cherche` | ISO UTC ; `cherche` = dernier passage qui l'a cherché (`Store::cherche`) |
-
-Retirer un mot supprime sa ligne seulement : ses vidéos restent.
-
-| `veille_compte` | Contenu |
-|---|---|
-| `id` | `<plateforme>:<handle>` |
-| `plateforme`, `handle`, `abonnes` | |
-| `mediane`, `nb_base`, `base_at` | médiane des vues, nombre de vidéos lues, date (`Store::base`) ; `comptes_a_baser` rend ceux à relire, ceux qui ont une vidéo sans vues d'abord |
-| `decouvert` | premier passage qui l'a vu |
-
-| `veille_video` | Contenu |
-|---|---|
-| `id` | comme `video.id` : brut pour TikTok, `instagram:<code>` |
-| `business`, `plateforme`, `compte`, `url` | |
-| `legende`, `publiee`, `duree_s` | |
-| `mot` | le premier mot qui l'a trouvée |
-| `media` | URL du fichier vidéo quand la page l'a donnée, expire en quelques heures |
-| `trouvee` | premier passage qui l'a vue (`trouvaille`) |
-| `app`, `langue`, `genre` | le classement de Claude ([`sources/veille.md`](sources/veille.md) § Le classement) : l'app promue si elle est clairement nommée (vide sinon), le code de langue (`LANGUES` ou `inconnue`), l'un des `GENRES` |
-| `classee` | ISO UTC du classement (`classer_video`) ; nulle = à classer, une nouvelle analyse la remet à nulle |
-
-| `veille_releve` | Contenu |
-|---|---|
-| `video`, `at` | clé primaire, un relevé par passage qui la voit (`relever`) |
-| `vues`, `likes`, `commentaires`, `partages`, `enregistrements` | compteurs cumulés, nuls si la page ne les donne pas |
-
-| `veille_analyse` | Contenu |
-|---|---|
-| `video` | clé primaire |
-| `at`, `modele` | date et modèle Claude |
-| `donnees` | JSON d'`AnalyseVeille` (`analyse_veille`) |
-
-| `veille_cout` | Contenu |
-|---|---|
-| `video`, `at`, `modele` | un appel Claude, réussi ou non (`cout_veille`) ; `video` vaut `demande:<id>` pour les appels d'une demande à Claude (mots-clés de Sonnet, tours de Haiku), `classement` pour ceux du classement |
-| `entree`, `sortie` | tokens facturés ; `entree` compte tout le prompt, cache écrit et lu compris |
-| `usd` | coût de l'appel, au prix de chaque sorte de token (`Usage::usd`) ; `depense_veille_usd` en fait la somme |
-
-Une demande à Claude, lancée depuis l'ancien écran Veille ([`sources/veille.md`](sources/veille.md) § La demande). Ces deux tables n'existent que dans la version Rust : l'app Swift les ignore.
-
-| `veille_demande` | Contenu |
-|---|---|
-| `id` | UUID en majuscules |
-| `business`, `prompt` | le business choisi et la consigne, 2 000 caractères au plus |
-| `debut`, `fin` | ISO UTC ; `fin` nulle tant qu'elle tourne |
-| `etat` | `en_cours`, `finie` ou `echouee` ; créer une demande passe celle restée `en_cours` en `echouee`, erreur `DemandeVeille::INTERROMPUE` (`nouvelle_demande`) |
-| `journal` | tableau JSON de lignes, une par étape (`noter_demande`) |
-| `synthese`, `erreur` | la synthèse de Haiku, ou ce qui l'a arrêtée (`finir_demande`) |
-| `fil` | l'id de la première demande de sa conversation ; nul pour les demandes d'avant les conversations, lues comme `coalesce(fil, id)` |
-
-Supprimer une conversation (`Store::supprimer_fil`) efface ses demandes et leurs `veille_retenue` d'un coup ; les vidéos restent dans la bank, les coûts dans `veille_cout`.
-
-| `veille_retenue` | Contenu |
-|---|---|
-| `demande`, `video` | clé primaire ; `video` est un `veille_video.id` (`retenir_video`) |
-| `raison` | pourquoi Claude l'a gardée ; la garder de nouveau la remplace |
+Les tables de l'ancienne veille par mots-clés (`veille_mot`, `veille_compte`, `veille_video`, `veille_releve`, `veille_analyse`, `veille_cout`, `veille_demande`, `veille_retenue`). La veille est le site de Viral Bank depuis le 25 nov. 2026 ([`sources/veille.md`](sources/veille.md)) : `schema.rs` les crée toujours (pas de migration), mais rien ne les écrit ni ne les lit plus. Leurs colonnes sont dans `schema.rs`.
 | `ordre` | rang de la première fois où elle est gardée, à partir de 0 |
 
 ### `collecte`
@@ -405,7 +342,6 @@ Clé, valeur texte (`Store::reglage`, `regler`, qui efface la clé pour `None`) 
 | `ecran`, `business`, `boutique`, `accueil.reseau`, `accueil.plan` | l'état de l'interface rendu au démarrage (`commandes::REGLAGES`) : dernier écran, filtre de business, store affiché (`app_store`, `play_store`, absent = total), panneaux repliés (`0`) |
 | `notifs.<type>` | `0` coupe les notifications d'un type du fil (`essai`, `achat`… ; `TypeFil::reglage_notif`), absent = activé |
 | `collecte.pause` | `1` met le collecteur en pause (`REGLAGE_PAUSE`) |
-| `veille.videos` | vidéos gardées par mot-clé et par plateforme à chaque passage de la Veille, de 10 à 100 (`REGLAGE_VIDEOS`), absent = 40 ; la version Swift l'ignore |
 | `posthog.horaire.<business>` | instant ISO du dernier calcul de `install` et `porte`, refaits au plus une fois par heure |
 | `posthog.evenements.<business>` | curseur de la table `evenement` : millisecondes Unix du dernier événement lu, par heure d'arrivée chez PostHog (`created_at`) |
 | `posthog.evenements.depuis.<business>` | premier jour de Paris que `evenement` couvre entier, posé au premier passage (97 jours avant) ; la version Swift l'ignore |

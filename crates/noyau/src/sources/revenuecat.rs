@@ -44,7 +44,7 @@ pub type Jours = HashMap<String, HashMap<String, f64>>;
 impl Source for RevenueCat {
     fn id(&self) -> &'static str { "revenuecat" }
     fn nom(&self) -> &'static str { "RevenueCat" }
-    fn cadence(&self) -> Option<i64> { Some(30 * 60) }
+    fn cadence(&self) -> i64 { 30 * 60 }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let dernier = ctx.store.dernier_succes(self.id())?;

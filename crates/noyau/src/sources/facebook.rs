@@ -36,7 +36,7 @@ pub struct Table {
 impl Source for Facebook {
     fn id(&self) -> &'static str { "facebook" }
     fn nom(&self) -> &'static str { "Facebook" }
-    fn cadence(&self) -> Option<i64> { Some(3 * 3600) }
+    fn cadence(&self) -> i64 { 3 * 3600 }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let store = &ctx.store;

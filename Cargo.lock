@@ -565,7 +565,6 @@ dependencies = [
 name = "cockpit"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "chrono",
  "noyau",
  "parking_lot",

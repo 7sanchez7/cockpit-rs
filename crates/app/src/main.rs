@@ -32,23 +32,12 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let pages = hote::Pages::default();
-    let veille = pages.clone();
     tauri::Builder::default()
         .menu(menu)
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(
-            tauri::plugin::Builder::<tauri::Wry, ()>::new("veille")
-                .invoke_handler(tauri::generate_handler![commandes::message])
-                .setup(move |app, _| {
-                    app.manage(veille);
-                    Ok(())
-                })
-                .build(),
-        )
         .setup(move |app| {
-            let hote = Arc::new(hote::HoteApp { app: app.handle().clone(), pages });
+            let hote = Arc::new(hote::HoteApp { app: app.handle().clone() });
             let collecteur = Collecteur::new(store.clone(), noyau::sources::toutes(), hote);
             app.manage(Etat { store: store.clone(), collecteur: collecteur.clone() });
             app.manage(ecrans::barre::EtatBarre::default());

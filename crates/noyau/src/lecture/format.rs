@@ -6,8 +6,6 @@ use chrono_tz::Europe::Paris;
 
 /// Ce qu'on affiche tant qu'une source n'a rien écrit.
 pub const VIDE: &str = "…";
-/// La cadence d'une source sans cadence, qui ne passe que sur demande.
-pub const A_LA_MAIN: &str = "à la main";
 /// Le vrai signe moins, pas le trait d'union.
 pub const MOINS: &str = "\u{2212}";
 const MILLIERS: char = '\u{202F}';

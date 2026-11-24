@@ -62,7 +62,7 @@ Lit `compte`, `compte_releve`, `video`, `video_releve`, `video_analyse`, la fich
 
 ## Veille
 
-Le site de Viral Bank (`https://viralbank.duckdns.org/`) dans l'onglet : la veille ne tourne plus dans le Cockpit, Viral Bank est la seule source ([sources/veille.md](sources/veille.md) dit ce qui reste de l'ancien moteur). Module `ecrans/veille.js`, commandes `montrer_veille(x, y, largeur, hauteur)` et `cacher_veille` (`ecrans/veille.rs`).
+Le site de Viral Bank (`https://viralbank.duckdns.org/`) dans l'onglet : la veille ne tourne plus dans le Cockpit, Viral Bank est la seule source ([sources/veille.md](sources/veille.md) : l'ancien moteur est retiré). Module `ecrans/veille.js`, commandes `montrer_veille(x, y, largeur, hauteur)` et `cacher_veille` (`ecrans/veille.rs`).
 
 Le site vit dans une WebView enfant de la fenêtre (libellé `viralbank`, `Window::add_child`, d'où la feature `unstable` de Tauri), posée sur le rectangle du cadre de l'écran (`.vide.remplit`, « Viral Bank s'ouvre ici. » le temps qu'elle arrive). Elle est créée à la première visite et, à chaque visite, attend la fin de l'animation d'entrée de l'écran (`poser`) ; `quitter` la cache au changement d'écran et le retour la remontre telle qu'on l'a laissée, page et défilement compris. Un `ResizeObserver` la recale quand la fenêtre change de taille. Les appels passent un par un (`envoyer`), pour qu'un `cacher` ne double jamais un `montrer`.
 

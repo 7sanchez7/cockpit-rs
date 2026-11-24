@@ -17,8 +17,8 @@ pub trait Source: Send + Sync {
     fn id(&self) -> &'static str;
     /// Nom affiché (`PostHog`).
     fn nom(&self) -> &'static str;
-    /// Intervalle entre deux passages réussis, en secondes ; `None` : la source ne passe que sur demande.
-    fn cadence(&self) -> Option<i64>;
+    /// Intervalle entre deux passages réussis, en secondes.
+    fn cadence(&self) -> i64;
     /// Délai avant de retenter après un échec.
     fn reprise(&self) -> i64 { super::collecteur::REPRISE_APRES_ECHEC }
     /// Lit la source pour chaque business qui l'utilise et rend le nombre de lignes écrites.

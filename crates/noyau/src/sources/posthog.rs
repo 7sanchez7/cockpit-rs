@@ -26,7 +26,7 @@ pub const CLE_API: &str = "POSTHOG_PERSONAL_API_KEY";
 impl Source for PostHog {
     fn id(&self) -> &'static str { "posthog" }
     fn nom(&self) -> &'static str { "PostHog" }
-    fn cadence(&self) -> Option<i64> { Some(15 * 60) }
+    fn cadence(&self) -> i64 { 15 * 60 }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let suivis: Vec<&Business> =

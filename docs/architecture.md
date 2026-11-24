@@ -34,16 +34,16 @@ Dépendances du workspace : `rusqlite` (SQLite embarqué, `bundled`), `tokio`, `
 | `chemins` | Où vivent la base, la graine et le cache (`donnees()`, `base()`, `graine()`, `cache()`, `adc()`), `COCKPIT_DIR` ([`runbook.md`](runbook.md) § Où sont les fichiers). |
 | `db` | `Database` sur rusqlite (WAL, attente de 5 s sur un verrou), lecture seule possible, `Valeur`, la macro `p!` des paramètres. |
 | `schema` | Le schéma SQL, identique à la version macOS, sans migrations : `COLONNES` ajoute les colonnes qui manquent. Tables dans [`donnees.md`](donnees.md). |
-| `store`, `store_veille` | `Store` : ouverture (schéma, graine, purge de `collecte` à 30 jours), écritures typées, réglages, `lot` (une transaction), `version`. `store_veille` : mots-clés, vidéos, analyses et coût de la veille. |
+| `store` | `Store` : ouverture (schéma, graine, purge de `collecte` à 30 jours), écritures typées, réglages, `lot` (une transaction), `version`. |
 | `business` | Un business et sa config JSON (`Config`, noms serde de la version Swift), ses événements PostHog (`Evenements`), la graine. |
 | `metrique` | Les noms des métriques de `serie`, les deux boutiques (`Boutique`), `PART_NETTE`, `EUR_PAR_USD`. |
 | `dimension` | Les réponses de l'onboarding qui découpent les installs. |
 | `jour` | Jours de Paris (`yyyy-MM-dd`) et dates ISO, comme la version macOS les écrit. |
-| `modeles`, `modeles_veille` | Ce que les sources écrivent et que les lectures rendent (`Plateforme`, `Passage`, `Evenement`, `VideoVeille`…). |
+| `modeles` | Ce que les sources écrivent et que les lectures rendent (`Plateforme`, `Passage`, `Evenement`…). |
 | `erreur` | `Erreur` (dont `NonConfigure`, `Format`, `Commande`, `Sql`) et `Res`. |
-| `collecte` | Le moteur : `collecteur` (`Collecteur`, un tour par minute, `REPRISE_APRES_ECHEC` 600 s, `FRAICHEUR_NOTIF` 2 h, réglage `collecte.pause`), `source` (le trait `Source` et `Contexte`), `http` (`Http`, rejoue les 429 et 5xx), `gcloud` (jeton Google par l'ADC), `secrets`, `jwt` (ES256 pour ASC, RS256 pour Google), `commande` (programmes locaux, `chemins::outils()` d'abord), `safari` (cookies de Safari), `hote` (le trait `Hote`, `Navigateur`, `SansInterface`), `ytdlp` (dont le nightly géré par l'app), `miniatures` (cache des images). Règles dans [`collecte.md`](collecte.md). |
+| `collecte` | Le moteur : `collecteur` (`Collecteur`, un tour par minute, `REPRISE_APRES_ECHEC` 600 s, `FRAICHEUR_NOTIF` 2 h, réglage `collecte.pause`), `source` (le trait `Source` et `Contexte`), `http` (`Http`, rejoue les 429 et 5xx), `gcloud` (jeton Google par l'ADC), `secrets`, `jwt` (ES256 pour ASC, RS256 pour Google), `commande` (programmes locaux, `chemins::outils()` d'abord), `safari` (cookies de Safari), `hote` (le trait `Hote`, `SansInterface`), `ytdlp` (dont le nightly géré par l'app, lancé par TikTok), `miniatures` (cache des images). Règles dans [`collecte.md`](collecte.md). |
 | `sources` | Une source par fichier ou dossier, et `toutes()`, le registre dans l'ordre de Santé. Fiches dans [`sources/`](sources/README.md). |
-| `lecture` | `Lectures` (fil, vidéos, comptes, tâches, apps, séries, rangs) et un fichier par écran : `accueil`, `argent`, `data`, `videos`, `percee`, `veille`, `sante`, `widget` (le résumé du tray). Plus `fenetre` (la période), `decoupage` (libellés du tunnel), `noms` (langues et pays), `format` (nombres et dates en français). |
+| `lecture` | `Lectures` (fil, vidéos, comptes, tâches, apps, séries, rangs) et un fichier par écran : `accueil`, `argent`, `data`, `videos`, `percee`, `sante`, `widget` (le résumé du tray). Plus `fenetre` (la période), `decoupage` (libellés du tunnel), `noms` (langues et pays), `format` (nombres et dates en français). |
 
 `crates/noyau/examples/essai.rs` lance une source contre les vraies API sur une base d'essai ([`runbook.md`](runbook.md) § Déboguer). Les tests sont à côté du code (`#[cfg(test)]`, dossiers `tests/` de `lecture` et des sources) ; `noyau::essai` est leur graine.
 
@@ -52,12 +52,12 @@ Dépendances du workspace : `rusqlite` (SQLite embarqué, `bundled`), `tokio`, `
 | Fichier | Contenu |
 |---|---|
 | `src/main.rs` | Ouvre le `Store`, crée le `Collecteur` avec `HoteApp`, le démarre, pose le tray, surveille `Store::version` et les sources en cours (événement `cockpit`, toutes les 400 ms). Fermer la fenêtre la cache : l'app reste dans le tray. |
-| `src/commandes.rs` | Les commandes communes : `etat`, `reglage`, `regler`, `ecrire_reglage`, `pause`, `relancer`, `session`, `lien` ; et `message`, le canal du plugin `veille`. |
+| `src/commandes.rs` | Les commandes communes : `etat`, `reglage`, `regler`, `ecrire_reglage`, `pause`, `relancer`, `session`, `lien`. |
 | `src/ecrans/` | `mod.rs` : `lectures(store, business)` (les `Lectures` des business affichés, sur la boutique du réglage `boutique`), `resume_tray`, et `commandes()`, la liste passée à `invoke_handler`. Un fichier par écran (`accueil`, `apps`, `barre`, `data`, `reglages`, `sante`, `sav`, `veille`, `videos`) : ses commandes de lecture, qui rendent la vue toute formatée, et ses actions ([`ecrans.md`](ecrans.md)). `veille` pose le site de Viral Bank en WebView enfant de `main` (`Window::add_child`, feature `unstable` de Tauri) : dès lors `main` n'est plus une `WebviewWindow`, on la prend par `get_window("main")` et sa page par `webviews()`. |
-| `src/hote.rs` | `HoteApp`, l'`Hote` de l'app : notifications du système, sessions (Safari sur Mac, sinon les cookies de la fenêtre Sessions), navigateur caché de la Veille (`Pages`, fenêtres `veille-*`). |
+| `src/hote.rs` | `HoteApp`, l'`Hote` de l'app : notifications du système, sessions (Safari sur Mac, sinon les cookies de la fenêtre Sessions). |
 | `src/tray.rs` | L'icône du tray : nombre de choses à traiter, chiffres du jour en info-bulle, menu Ouvrir, SAV, Tout relancer, Collecte en pause, Quitter. Elle remplace le widget du bureau de la version Mac. |
 | `tauri.conf.json` | Fenêtre `main` 1320 × 920 (au moins 1080 × 720), CSP, protocole `asset` pour le cache, installeur NSIS en français. `tauri.macos.conf.json` met la barre de titre en `Overlay` ; `tauri.windows.conf.json` et `tauri.linux.conf.json` coupent les décorations (l'interface dessine ses boutons). |
-| `capabilities/` | `defaut.json` (fenêtres `main` et `sessions-*`), `veille.json` (les pages cachées `veille-*`, sur TikTok, Instagram et Facebook, n'ont que `veille:default` : la commande `message` du plugin `veille`, déclaré dans `build.rs`). |
+| `capabilities/` | `defaut.json` (fenêtres `main` et `sessions-*`). |
 | `ui/` | L'interface, sans framework ni bundler ([`../crates/app/ui/README.md`](../crates/app/ui/README.md), [`design.md`](design.md)). |
 
 ## Un chiffre, de bout en bout

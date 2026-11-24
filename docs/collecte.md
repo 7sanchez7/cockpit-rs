@@ -9,10 +9,9 @@ Comment les chiffres arrivent dans la base. Le moteur est dans `crates/noyau/src
 - échéance = début du dernier passage + `cadence` de la source (`a_echeance`) ;
 - après un passage en **erreur** ou **non configuré** (session expirée, clé absente), le délai est le plus court de `cadence` et `reprise`. `reprise` vaut `REPRISE_APRES_ECHEC` (600 s) par défaut ; Instagram la met à sa cadence de 3 h. Une source repasse ainsi au vert dès que la session revient, sans attendre sa cadence ;
 - une source sans aucun passage est due tout de suite ;
-- une source sans cadence (`cadence()` rend `None`, la veille) n'est jamais due : elle ne passe que sur demande, par `relancer(Some(id))` ;
 - une source déjà en cours n'est pas relancée (`en_cours`) ;
 - le réglage `collecte.pause = 1` (`REGLAGE_PAUSE`, menu de la barre des tâches ou commande `pause`) suspend les tours ;
-- `relancer(None)` relance tout de suite toutes les sources qui ont une cadence (Ctrl R ou ⌘R, « Tout relancer » du menu de la barre des tâches), `relancer(Some(id))` une seule source, même sans cadence (bouton de Santé, « Lancer la veille »).
+- `relancer(None)` relance tout de suite toutes les sources (Ctrl R ou ⌘R, « Tout relancer » du menu de la barre des tâches), `relancer(Some(id))` une seule (bouton de Santé).
 
 Chaque passage écrit une ligne dans `collecte` (`Store::journal`) : `ok` avec le nombre de lignes, `erreur` avec le message (`Erreur` affichée) ou `non_configure` (gris dans Santé, pas une panne). Une erreur n'est jamais avalée : elle remonte au collecteur, qui l'écrit. Le journal va aussi sur la sortie d'erreur (`cockpit : posthog : 42 lignes en 3,1 s`), visible dans le terminal de `cargo run -p cockpit`.
 
@@ -35,9 +34,6 @@ Aides partagées, dans `crates/noyau/src/collecte/` :
 - `http.rs` : `Http` et `Requete` (ci-dessous), `UA_NAVIGATEUR` (Chrome sur Mac), `UA_SAFARI` et `UA_SESSION` (le navigateur de la session : Safari sur Mac, Edge WebView2 sous Windows), `entete_cookie` (l'en-tête `Cookie` d'une session, clés triées), `encoder` (une valeur d'URL), `extrait` (le début d'une réponse pour un message d'erreur).
 - `safari.rs` : les cookies d'un domaine dans Safari (§ Sessions), et `se_connecter`, la fin des messages de session expirée : « se reconnecter sur `<site>` dans Safari » sur Mac, « se reconnecter à `<site>` dans Réglages, Sessions » ailleurs (`safari::se_connecter`).
 - `ytdlp.rs` : la liste (`liste`, `yt-dlp --flat-playlist -J`) et le détail (`details`, `yt-dlp -j --skip-download`) des vidéos publiques d'un compte TikTok ou YouTube, et `tenir_a_jour`, qui garde un yt-dlp nightly dans `chemins::outils()` (§ Programmes locaux).
-- `lurkapi.rs` : la recherche et les profils TikTok et Instagram par l'API LurkAPI, sans session ni navigateur (`cle`, `chercher`, `dernieres`), un 5xx ou un 429 rejoué 2 fois après `Http` : le chemin principal de la Veille ([`sources/veille.md`](sources/veille.md) § Les fournisseurs).
-- `fournisseurs.rs` : `Fournisseurs`, les clés LurkAPI et TikHub résolues une fois par passage, LurkAPI d'abord et TikHub en repli (`configure`, `chercher`, `dernieres`).
-- `tikhub.rs` : la recherche et les profils TikTok et Instagram par l'API TikHub, sans session ni navigateur (`cle`, `chercher`, `dernieres`) : le repli de la Veille quand LurkAPI échoue ([`sources/veille.md`](sources/veille.md) § Les fournisseurs).
 - `miniatures.rs` : télécharge les images absentes du dossier `miniatures` du cache (§ Où sont les fichiers), un fichier par clé (`:` et `/` remplacés par `_`) : l'id de la vidéo pour sa miniature, `avatar:<compte>`, `icone:<id App Store>`, `premiere:<id de vidéo>` pour la première image du flux. `extraire_premieres` les tire toutes, 4 à la fois (`EXTRACTIONS_EN_PARALLELE`) : `yt-dlp -g` en 960 px de haut au plus, puis `ffmpeg -frames:v 1`, écrit dans un `.part` puis renommé. Seuls YouTube et Facebook en ont (`cles`), leur miniature n'étant pas la première image. L'interface lit ce dossier sans réseau ; le vider fait tout revenir au passage suivant.
 - `jwt.rs` : `es256` (App Store Connect) et `rs256` (Play Console).
 - `gcloud.rs` et `secrets.rs` : § Secrets.
@@ -52,12 +48,11 @@ La collecte ne sait pas dans quelle app elle tourne. Ce qu'elle demande à l'app
 | `notifier(titre, corps, id)` | une notification du système | aucune |
 | `cookies(domaine, requis)` | la session d'un site, par nom de cookie ; `NonConfigure` sans le cookie `requis` | Safari (`safari::cookies`) |
 | `provenance(domaine, requis)` | d'où vient la session, en dates et en nombres de cookies, jamais une valeur : pour les messages d'erreur | `safari::provenance` |
-| `navigateur(filtres, cookies, domaine)` | une page web cachée qui garde le JSON des réponses dont l'URL contient un filtre (`Navigateur::lire`, `ou`, `fermer`) | `NonConfigure` |
 
 Deux hôtes :
 
-- `SansInterface` : pas de notification ni de navigateur caché, les cookies de Safari sur Mac. C'est l'hôte de l'essai d'une source et des tests. La CLI s'en servira, elle n'a encore aucune commande (`crates/cli/src/main.rs`).
-- `HoteApp` (`crates/app/src/hote.rs`) : les notifications par `tauri-plugin-notification` ; les cookies de Safari d'abord, puis ceux du magasin de cookies des WebViews de l'app (§ Sessions) ; le navigateur caché, une fenêtre Tauri `veille-<n>` hors de l'écran (1 280 × 1 800 à -30 000 px), avec l'agent du moteur (`UA_SAFARI` sur Mac, `UA_NAVIGATEUR` ailleurs) et le script `SCRIPT_ECOUTE` qui renvoie chaque réponse `fetch` ou XHR filtrée. Une page qui ne charge pas en 45 s rend une erreur.
+- `SansInterface` : pas de notification, les cookies de Safari sur Mac. C'est l'hôte de l'essai d'une source et des tests.
+- `HoteApp` (`crates/app/src/hote.rs`) : les notifications par `tauri-plugin-notification` ; les cookies de Safari d'abord, puis ceux du magasin de cookies des WebViews de l'app (§ Sessions).
 
 ## Sessions
 
@@ -85,7 +80,7 @@ Une source dont le dernier passage était `ok` et qui tombe en `erreur` envoie �
 pub trait Source: Send + Sync {
     fn id(&self) -> &'static str;        // "posthog" : clé du journal, préfixe des ids du fil et des tâches
     fn nom(&self) -> &'static str;       // "PostHog"
-    fn cadence(&self) -> Option<i64>;    // secondes entre deux passages réussis, None : sur demande seulement
+    fn cadence(&self) -> i64;            // secondes entre deux passages réussis
     fn reprise(&self) -> i64 { REPRISE_APRES_ECHEC }
     async fn collecte(&self, ctx: &Contexte) -> Res<usize>;   // lignes écrites
 }
@@ -108,7 +103,7 @@ Le trait est dans `crates/noyau/src/collecte/source.rs`. `Contexte` donne `store
 
 `commande::lancer(programme, args)` et `commande::texte` (`crates/noyau/src/collecte/commande.rs`) lancent `gcloud`, `yt-dlp` ou `ffmpeg` sans bloquer l'interface, sans fenêtre de console sous Windows. Un code de sortie non nul rend `Commande("<programme> a échoué (<code>) : <début de la sortie d'erreur>")`.
 
-Une app lancée depuis le Finder ou le menu Démarrer n'a pas le PATH du terminal : `commande::trouver` cherche d'abord dans `chemins::outils()` (`<données>/bin`, où `ytdlp::tenir_a_jour` télécharge un yt-dlp nightly tous les 3 jours : [sources/veille.md](sources/veille.md) § yt-dlp nightly), puis dans le PATH, puis :
+Une app lancée depuis le Finder ou le menu Démarrer n'a pas le PATH du terminal : `commande::trouver` cherche d'abord dans `chemins::outils()` (`<données>/bin`, où `ytdlp::tenir_a_jour` télécharge un yt-dlp nightly tous les 3 jours : [sources/tiktok.md](sources/tiktok.md) § yt-dlp nightly), puis dans le PATH, puis :
 
 | Mac | Windows |
 |---|---|
@@ -152,8 +147,6 @@ Le jeton Google (`GCloud`, `crates/noyau/src/collecte/gcloud.rs`) ouvre Secret M
 | clé `.p8` App Store Connect | App Store Connect | `.appstoreconnect/private_keys/AuthKey_<KEYID>.p8` du dossier personnel, voir sa fiche |
 | clé JSON du compte de service Play | Play Console | `.googleplay/<business>-play-publisher.json` du dossier personnel, voir sa fiche |
 | cookies `tiktok.com`, `instagram.com`, `facebook.com` | TikTok, Instagram, Facebook | § Sessions |
-| `LURKAPI_API_KEY` | Veille (TikTok et Instagram, sans session), fournisseur principal | réglage `veille.cle_scrappeur` (Réglages, onglet Clés), sinon trousseau ou Secret Manager, voir [`sources/veille.md`](sources/veille.md) § Les fournisseurs |
-| `TIKHUB_API_KEY` | Veille (TikTok et Instagram, sans session), repli | trousseau ou Secret Manager, voir [`sources/veille.md`](sources/veille.md) § Les fournisseurs |
 | aucun | Contenu, YouTube | |
 
 ## Business
@@ -171,7 +164,6 @@ Un business = une ligne de `business` avec sa `Config` (`crates/noyau/src/busine
 | `pays`, `genre` | `pays`, `genre` | Classements (storefronts et catégorie, 6017 par défaut) |
 | `contenuDir` | `contenu_dir` | Contenu (dossier `bank` des fiches) |
 | `objectifMensuelEUR` | `objectif_mensuel_eur` | écran Data, 10 000 par défaut |
-| `claude` | `claude` | Veille : le nom du secret de la clé Anthropic, `ANTHROPIC_API_KEY` par défaut |
 | `evenements` | `evenements` | PostHog : le nom des six événements lus, `installation`, `etape`, `paywall`, `essai`, `achat`, `usage` ([`sources/posthog.md`](sources/posthog.md)). Graine seulement |
 
 Un champ absent coupe la source pour ce business, sans erreur. Une clé absente du JSON prend sa valeur par défaut.
@@ -210,7 +202,7 @@ Avec `COCKPIT_DIR`, les données sont dans ce dossier et le cache dans `<COCKPIT
 cargo run -p noyau --example essai -- PostHog
 ```
 
-L'exemple `crates/noyau/examples/essai.rs` lance la seule source demandée (par son nom ou son `id`, sans tenir compte de la casse) contre les vraies API, avec la graine de la machine, sur `.cache/essai.sqlite` (pas la base de l'app). L'hôte est `SansInterface` : ni notification, ni navigateur caché. Il affiche ensuite ce qu'elle a écrit : séries du passage, fil, tâches, compteurs des tables.
+L'exemple `crates/noyau/examples/essai.rs` lance la seule source demandée (par son nom ou son `id`, sans tenir compte de la casse) contre les vraies API, avec la graine de la machine, sur `.cache/essai.sqlite` (pas la base de l'app). L'hôte est `SansInterface` : pas de notification. Il affiche ensuite ce qu'elle a écrit : séries du passage, fil, tâches, compteurs des tables.
 
 ## Ajouter une source
 

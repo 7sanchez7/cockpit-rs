@@ -19,7 +19,7 @@ const RECENTE_S: i64 = 7 * 86_400;
 impl Source for YouTube {
     fn id(&self) -> &'static str { "youtube" }
     fn nom(&self) -> &'static str { "YouTube" }
-    fn cadence(&self) -> Option<i64> { Some(3600) }
+    fn cadence(&self) -> i64 { 3600 }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let store = &ctx.store;
@@ -37,7 +37,7 @@ impl Source for YouTube {
         let mut profils = vec![];
         for c in &comptes {
             let lu: Res<()> = async {
-                let sortie = ytdlp::liste(&format!("{}/shorts", c.plateforme.profil(&c.handle)), None).await?;
+                let sortie = ytdlp::liste(&format!("{}/shorts", c.plateforme.profil(&c.handle))).await?;
                 let l = ytdlp::lire_liste(&sortie, Plateforme::Youtube, &c.business, &c.handle, &maintenant)?;
                 let a_ouvrir: Vec<String> = l.videos.iter()
                     .filter(|v| match publiees.get(&v.id).copied().flatten() {

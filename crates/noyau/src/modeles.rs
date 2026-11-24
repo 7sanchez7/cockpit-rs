@@ -28,20 +28,19 @@ pub enum TypeFil {
     #[serde(rename = "RANG")] Rang,
     #[serde(rename = "IA")] Ia,
     #[serde(rename = "VERSION")] Version,
-    #[serde(rename = "VEILLE")] Veille,
 }
 
 impl TypeFil {
-    pub const TOUS: [TypeFil; 10] = [
+    pub const TOUS: [TypeFil; 9] = [
         TypeFil::Essai, TypeFil::Achat, TypeFil::Avis, TypeFil::Msg, TypeFil::Retour,
-        TypeFil::Video, TypeFil::Rang, TypeFil::Ia, TypeFil::Version, TypeFil::Veille,
+        TypeFil::Video, TypeFil::Rang, TypeFil::Ia, TypeFil::Version,
     ];
 
     pub fn brut(self) -> &'static str {
         match self {
             TypeFil::Essai => "ESSAI", TypeFil::Achat => "ACHAT", TypeFil::Avis => "AVIS", TypeFil::Msg => "MSG",
             TypeFil::Retour => "RETOUR", TypeFil::Video => "VIDEO", TypeFil::Rang => "RANG", TypeFil::Ia => "IA",
-            TypeFil::Version => "VERSION", TypeFil::Veille => "VEILLE",
+            TypeFil::Version => "VERSION",
         }
     }
 
@@ -51,7 +50,7 @@ impl TypeFil {
         match self {
             TypeFil::Essai => "Essai", TypeFil::Achat => "Achat", TypeFil::Avis => "Avis", TypeFil::Msg => "Message",
             TypeFil::Retour => "Retour", TypeFil::Video => "Vidéo", TypeFil::Rang => "Classement", TypeFil::Ia => "IA",
-            TypeFil::Version => "Version", TypeFil::Veille => "Veille",
+            TypeFil::Version => "Version",
         }
     }
 

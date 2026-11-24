@@ -33,7 +33,7 @@ const RECENTE_S: i64 = 14 * 86_400;
 impl Source for TikTok {
     fn id(&self) -> &'static str { "tiktok" }
     fn nom(&self) -> &'static str { "TikTok" }
-    fn cadence(&self) -> Option<i64> { Some(30 * 60) }
+    fn cadence(&self) -> i64 { 30 * 60 }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let store = &ctx.store;
@@ -49,7 +49,7 @@ impl Source for TikTok {
         let mut images = HashMap::new();
         for c in &comptes {
             let url = c.plateforme.profil(&c.handle);
-            match ytdlp::liste(&url, None).await.and_then(|s| ytdlp::lire_liste(&s, Plateforme::Tiktok, &c.business, &c.handle, &maintenant)) {
+            match ytdlp::liste(&url).await.and_then(|s| ytdlp::lire_liste(&s, Plateforme::Tiktok, &c.business, &c.handle, &maintenant)) {
                 Ok(l) => {
                     liste.videos.extend(l.videos);
                     liste.releves.extend(l.releves);
@@ -274,7 +274,7 @@ async fn compte_session(cookie: &str, http: &Http) -> Res<String> {
 // décodage
 
 /// Les compteurs d'un compte et son avatar, lus dans le JSON de sa page publique.
-pub fn profil(page: &[u8], compte: &str, at: &Date) -> Res<(crate::modeles::ReleveCompte, Option<String>)> {
+fn profil(page: &[u8], compte: &str, at: &Date) -> Res<(crate::modeles::ReleveCompte, Option<String>)> {
     let html = String::from_utf8_lossy(page);
     let lu = || -> Option<(Map<String, Value>, Option<Value>)> {
         let marque = r#"id="__UNIVERSAL_DATA_FOR_REHYDRATION__""#;

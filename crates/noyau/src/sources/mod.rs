@@ -11,7 +11,6 @@ pub mod play_console;
 pub mod posthog;
 pub mod revenuecat;
 pub mod tiktok;
-pub mod veille;
 pub mod youtube;
 
 use crate::collecte::Source;
@@ -32,6 +31,5 @@ pub fn toutes() -> Vec<Arc<dyn Source>> {
         Arc::new(firebase::Firebase),
         Arc::new(classements::Classements),
         Arc::new(notes::Notes),
-        Arc::new(veille::Veille),
     ]
 }

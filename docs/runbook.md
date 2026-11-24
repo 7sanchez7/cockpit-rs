@@ -11,10 +11,9 @@ Tout se lance depuis la racine du dépôt.
 - Pour un business avec `firebaseProject` seulement, identifiants Google par défaut pour Secret Manager et Firestore : `gcloud auth application-default login` (une fois ; crée `application_default_credentials.json` dans `~/.config/gcloud/` sur Mac, `%APPDATA%\gcloud\` sous Windows). Le cockpit lit ce fichier et rafraîchit le jeton en HTTP ; la CLI gcloud ne sert qu'en repli (`gcloud auth print-access-token`). `GOOGLE_APPLICATION_CREDENTIALS` remplace le fichier.
 - La clé App Store Connect `AuthKey_<KEYID>.p8` dans `.appstoreconnect/private_keys/` du dossier personnel (`~` sur Mac, `C:\Users\<nom>` sous Windows), et l'issuer dans le champ `ascIssuer` du business (Réglages, onglet Business, ou la graine).
 - `yt-dlp` pour TikTok et YouTube, `ffmpeg` pour la première image des vidéos YouTube et Facebook. Mac : `brew install yt-dlp ffmpeg`. Windows : `winget install yt-dlp.yt-dlp Gyan.FFmpeg` (ou scoop). L'app les cherche dans son dossier d'outils (`<données>/bin`), dans le PATH, puis dans les dossiers de Homebrew, winget, scoop et pip, même lancée depuis le Finder ou le menu Démarrer (`noyau::collecte::commande`). Pour TikTok, elle télécharge elle-même un yt-dlp nightly dans ce dossier (renouvelé tous les 3 jours, `ytdlp::tenir_a_jour`) : celui du PATH ne sert que de repli.
-- **La Veille** ([`sources/veille.md`](sources/veille.md)) : la recherche TikTok ne tourne que dans l'app (le navigateur caché n'existe pas dans la CLI ni dans l'essai) et demande une session TikTok ; la recherche Instagram (DuckDuckGo et embeds) n'a besoin d'aucune session, seule la médiane des comptes Instagram en demande une. Elle demande en plus : `yt-dlp` (le nightly se télécharge seul) ; `ffmpeg` et `ffprobe` pour les images des analyses ; la clé `ANTHROPIC_API_KEY` (nom réglable par le champ `claude` de la graine), sans laquelle les vidéos sont relevées mais pas analysées ; `transcrire` dans le PATH, facultatif (sans lui, l'analyse se fait sur les images seules). L'écran Veille montre désormais Viral Bank ; ce moteur ne se pilote plus que par la CLI : mots-clés par `cockpit veille mot ajoute` ([`cli.md`](cli.md)), passage par la relance de Veille dans Santé ou la palette.
 - **Les sessions** de tiktok.com, instagram.com et facebook.com, pour les stats privées TikTok, Instagram et Facebook :
   - Mac : une session ouverte dans Safari, et l'accès complet au disque pour Cockpit (Réglages Système, Confidentialité et sécurité, Accès complet au disque, ajouter `Cockpit.app`, puis la relancer). Sans Safari, la fenêtre Sessions de l'app sert de repli.
-  - Windows : la commande Tauri `session` (`crates/app/src/commandes.rs`, sites `tiktok`, `instagram`, `facebook`) ouvre la page de connexion du site dans une fenêtre de l'app : Réglages, onglet Sessions, « Se connecter ». La session reste dans le magasin de cookies de l'app (WebView2), partagé avec le navigateur caché de la Veille.
+  - Windows : la commande Tauri `session` (`crates/app/src/commandes.rs`, sites `tiktok`, `instagram`, `facebook`) ouvre la page de connexion du site dans une fenêtre de l'app : Réglages, onglet Sessions, « Se connecter ». La session reste dans le magasin de cookies de l'app (WebView2).
   - Session expirée : la source finit en `non_configure` avec le message qui dit où se reconnecter (`cockpit etat`), se reconnecter.
 - **Le plan de l'Accueil** vient d'une note de l'app Notes (Mac seulement) dont la première ligne est « Cockpit » ([`sources/notes.md`](sources/notes.md)). Sous Windows, la source Notes reste en gris.
 
@@ -88,7 +87,7 @@ Plateformes : `tiktok`, `instagram`, `youtube`, `facebook`. Le business doit exi
 
 ## Voir l'app depuis un agent
 
-Pour les chiffres, la CLI d'abord : `cockpit etat`, `cockpit veille`, `cockpit videos` ([`cli.md`](cli.md)). La capture ne sert qu'à juger l'interface.
+Pour les chiffres, la CLI d'abord : `cockpit etat`, `cockpit videos` ([`cli.md`](cli.md)). La capture ne sert qu'à juger l'interface.
 
 Changer d'écran sans clavier : le réglage `ecran` puis une relance, `sqlite3 <base> "insert or replace into reglage values ('ecran', 'data')"` (valeurs : `app`, `data`, `videos`, `veille`, `sante`, `aTraiter` (SAV), `apps`). Sur une copie : `COCKPIT_DIR=<copie> cargo run -p cockpit`. Sur Mac, capture de la fenêtre seule : `screencapture -x -o -l <id de la fenêtre> ecran.png`.
 
@@ -96,6 +95,6 @@ Changer d'écran sans clavier : le réglage `ecran` puis une relance, `sqlite3 <
 
 **ADC expirés** (Santé : « invalid_grant ») : `gcloud auth application-default login`.
 
-**yt-dlp introuvable** : Santé le dit pour TikTok et YouTube. L'app télécharge un nightly dans `<données>/bin` à chaque passage de la Veille ou de TikTok ; si le téléchargement échoue (GitHub injoignable), l'installer (§ Prérequis) ; s'il est ailleurs, l'ajouter au PATH du système, pas seulement à celui du terminal.
+**yt-dlp introuvable** : Santé le dit pour TikTok et YouTube. L'app télécharge un nightly dans `<données>/bin` à chaque passage de TikTok ; si le téléchargement échoue (GitHub injoignable), l'installer (§ Prérequis) ; s'il est ailleurs, l'ajouter au PATH du système, pas seulement à celui du terminal.
 
 **Notifications muettes** : Mac, Réglages Système, Notifications, Cockpit ; Windows, Paramètres, Système, Notifications, Cockpit. En debug sous Windows, les notifications portent le nom de PowerShell : c'est l'app installée qui a son nom.

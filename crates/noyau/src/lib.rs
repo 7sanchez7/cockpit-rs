@@ -11,10 +11,8 @@ pub mod jour;
 pub mod lecture;
 pub mod metrique;
 pub mod modeles;
-pub mod modeles_veille;
 pub mod schema;
 pub mod sources;
 pub mod store;
-pub mod store_veille;
 
 pub use erreur::{Erreur, Res};

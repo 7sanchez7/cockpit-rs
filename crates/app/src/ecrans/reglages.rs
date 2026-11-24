@@ -4,7 +4,6 @@ use crate::commandes::{texte, Rep, SITES};
 use crate::Etat;
 use noyau::business::{Business, Config};
 use noyau::collecte::collecteur::REGLAGE_PAUSE;
-use noyau::collecte::{lurkapi, tikhub};
 use noyau::lecture::format;
 use noyau::lecture::recherche::plier;
 use noyau::modeles::TypeFil;
@@ -133,9 +132,7 @@ pub async fn supprimer_business(etat: State<'_, Etat>, id: String) -> Rep<()> {
 }
 
 /// Les clés rangées par business dans le trousseau, avec leur libellé.
-const CLES: [(&str, &str); 5] = [
-    (lurkapi::CLE, "LurkAPI, clé API (veille, recommandé)"),
-    (tikhub::CLE, "TikHub, clé API (veille, repli)"),
+const CLES: [(&str, &str); 3] = [
     (posthog::CLE_PROJET, "PostHog, id du projet"),
     (posthog::CLE_API, "PostHog, clé personnelle scopée au projet"),
     (revenuecat::NOM_CLE, "RevenueCat, clé secrète v2 en lecture"),
@@ -149,7 +146,6 @@ const COFFRE: &str = if cfg!(target_os = "macos") { "Trousseau" } else if cfg!(w
 pub struct Cles {
     coffre: &'static str,
     cles: Vec<Cle>,
-    scrappeur: bool,
     pied: String,
     fichiers: Vec<Fichier>,
 }
@@ -177,11 +173,9 @@ pub async fn reglages_cles(etat: State<'_, Etat>, business: String) -> Rep<Cles>
     let projet = b.config.firebase_project.as_ref().map(|p| format!(" du projet {p}")).unwrap_or_default();
     let asc = app_store_connect::dossier_cles().and_then(|d| app_store_connect::cle(&d)).is_ok();
     let adc = noyau::chemins::adc().exists();
-    let cle = etat.store.reglage(lurkapi::REGLAGE).map_err(texte)?.filter(|v| !v.trim().is_empty());
     Ok(Cles {
         coffre: COFFRE,
         cles,
-        scrappeur: cle.is_some(),
         pied: format!("Sans clé dans le {COFFRE}, le cockpit lit la variable d'environnement du même nom, puis Secret Manager{projet}."),
         fichiers: vec![
             Fichier {
@@ -217,25 +211,6 @@ pub async fn ranger_cle(etat: State<'_, Etat>, business: String, nom: String, va
 pub async fn effacer_cle(etat: State<'_, Etat>, business: String, nom: String) -> Rep<()> {
     let b = self::business(&etat, &business)?;
     etat.collecteur.secrets.effacer(nom_cle(&nom)?, &b).map_err(texte)
-}
-
-/// La clé du scrappeur de la veille, rangée dans la base (elle passe avant le trousseau).
-#[tauri::command]
-pub async fn ranger_cle_scrappeur(etat: State<'_, Etat>, valeur: String) -> Rep<()> {
-    let valeur = valeur.trim();
-    if valeur.is_empty() {
-        return Ok(());
-    }
-    etat.store.regler(lurkapi::REGLAGE, Some(valeur)).map_err(texte)?;
-    etat.store.a_change();
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn effacer_cle_scrappeur(etat: State<'_, Etat>) -> Rep<()> {
-    etat.store.regler(lurkapi::REGLAGE, None).map_err(texte)?;
-    etat.store.a_change();
-    Ok(())
 }
 
 #[derive(Serialize)]
@@ -275,7 +250,7 @@ pub struct SourceCadence {
 #[tauri::command]
 pub async fn reglages_collecte(etat: State<'_, Etat>) -> Rep<Collecte> {
     let sources = etat.collecteur.sources.iter()
-        .map(|s| SourceCadence { nom: s.nom(), cadence: s.cadence().map_or(format::A_LA_MAIN.into(), |c| format!("toutes les {}", format::cadence(c as f64))) })
+        .map(|s| SourceCadence { nom: s.nom(), cadence: format!("toutes les {}", format::cadence(s.cadence() as f64)) })
         .collect();
     Ok(Collecte {
         pause: etat.store.reglage(REGLAGE_PAUSE).map_err(texte)?.as_deref() == Some("1"),
@@ -340,9 +315,9 @@ mod tests {
     #[test]
     fn garde_les_evenements_et_refuse_le_faux() {
         let mut avant = brouillon().business(None).unwrap();
-        avant.config.claude = "AUTRE".into();
+        avant.config.evenements.achat = "AUTRE".into();
         let b = Brouillon { lettre: "Rol".into(), ..Brouillon::depuis(&avant) }.business(Some(&avant)).unwrap();
-        assert_eq!((b.lettre.as_str(), b.config.claude.as_str()), ("Ro", "AUTRE"));
+        assert_eq!((b.lettre.as_str(), b.config.evenements.achat.as_str()), ("Ro", "AUTRE"));
         assert_eq!(Brouillon { genre: "x".into(), ..brouillon() }.business(None).unwrap_err(), "La catégorie App Store est un nombre (6017 = Éducation).");
         assert_eq!(Brouillon { objectif: "dix".into(), ..brouillon() }.business(None).unwrap_err(), "L'objectif mensuel est un nombre d'euros.");
         assert_eq!(Brouillon { nom: " ".into(), ..brouillon() }.business(None).unwrap_err(), "Il faut un nom.");

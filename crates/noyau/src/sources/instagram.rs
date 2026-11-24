@@ -30,7 +30,7 @@ pub struct Profil {
 impl Source for Instagram {
     fn id(&self) -> &'static str { "instagram" }
     fn nom(&self) -> &'static str { "Instagram" }
-    fn cadence(&self) -> Option<i64> { Some(3 * 3600) }
+    fn cadence(&self) -> i64 { 3 * 3600 }
     /// Des appels refusés toutes les 10 minutes entretiennent le blocage d'Instagram.
     fn reprise(&self) -> i64 { 3 * 3600 }
 

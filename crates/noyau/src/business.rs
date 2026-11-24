@@ -45,7 +45,6 @@ pub struct Config {
     #[serde(rename = "objectifMensuelEUR")]
     pub objectif_mensuel_eur: f64,
     pub evenements: Evenements,
-    pub claude: String,
 }
 
 impl Default for Config {
@@ -54,7 +53,6 @@ impl Default for Config {
             app_store_id: None, asc_issuer: None, asc_vendor: None, play_package: None, play_bucket: None,
             firebase_project: None, posthog_host: None, contenu_dir: None,
             pays: vec![], genre: 6017, objectif_mensuel_eur: 10_000.0, evenements: Evenements::default(),
-            claude: "ANTHROPIC_API_KEY".into(),
         }
     }
 }

@@ -12,9 +12,13 @@ Aucun compte TikTok actif dans les business suivis : `NonConfigure` « aucun com
 yt-dlp --flat-playlist -J https://www.tiktok.com/@monapp
 ```
 
-Lancé par `commande::lancer` (`crates/noyau/src/collecte/commande.rs`), qui cherche `yt-dlp` dans le dossier d'outils du cockpit (`<données>/bin`, où `ytdlp::tenir_a_jour` télécharge un nightly au début de chaque collecte : la stable échoue sur les profils TikTok, voir [veille.md](veille.md) § yt-dlp nightly), puis dans le `PATH` et les dossiers d'installation courants : Homebrew et `~/.local/bin` sur Mac, WinGet, Scoop et les scripts Python sous Windows (`yt-dlp.exe`). Absent : `Commande` « yt-dlp introuvable : l'installer et le mettre dans le PATH ». Public, sans cookie, marche pour tous les comptes.
+Lancé par `commande::lancer` (`crates/noyau/src/collecte/commande.rs`), qui cherche `yt-dlp` dans le dossier d'outils du cockpit (`<données>/bin`, où `ytdlp::tenir_a_jour` télécharge un nightly au début de chaque collecte : la stable échoue sur les profils TikTok, voir § yt-dlp nightly), puis dans le `PATH` et les dossiers d'installation courants : Homebrew et `~/.local/bin` sur Mac, WinGet, Scoop et les scripts Python sous Windows (`yt-dlp.exe`). Absent : `Commande` « yt-dlp introuvable : l'installer et le mettre dans le PATH ». Public, sans cookie, marche pour tous les comptes.
 
 Lu dans `entries[]` (`ytdlp::lire_liste`) : l'id, l'URL, la date de publication, la durée, la légende, les compteurs publics et la miniature d'id `cover`. Pas de liste dans la sortie : `Format` « yt-dlp TikTok @monapp : pas de liste de vidéos ».
+
+## yt-dlp nightly
+
+TikTok casse yt-dlp en quelques semaines : la stable 2026.10.26 échoue sur les profils (« Failed to parse JSON ») là où le nightly 2026.11.17 les lit, sans session. `ytdlp::tenir_a_jour` garde donc un nightly dans `chemins::outils()` (`<données>/bin/yt-dlp[.exe]`, `~/Library/Application Support/Cockpit/bin` sur Mac), téléchargé depuis `https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/<fichier>` (`yt-dlp_macos`, `yt-dlp.exe`, `yt-dlp_linux`, `yt-dlp_linux_aarch64`, environ 37 Mo sur Mac), renouvelé quand il a plus de 3 jours (`FRAICHEUR`). Il est écrit à côté sous un autre nom, doit répondre à `--version`, puis remplace l'ancien : un binaire tronqué ne casse rien. `commande::trouver` cherche ce dossier avant le PATH. Appelé au début de chaque passage de TikTok ; un verrou évite deux téléchargements à la fois. Pas de téléchargement sur un système sans fichier correspondant.
 
 ## Le profil : la page publique
 

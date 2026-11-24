@@ -11,7 +11,7 @@ C'est le portage en Rust de [la version SwiftUI pour Mac](https://github.com/7sa
 | App | Comment va l'app aujourd'hui, sur 7, 30 ou 90 jours, comparée à la période d'avant ? |
 | Data | Combien on gagne, qui convertit en essai puis en payant, qui revient, découpé jusqu'au segment (âge, source, écran du tunnel…) ? |
 | Vidéos | Quelle vidéo marche, laquelle passe le seuil de partages et d'enregistrements ? |
-| Veille | Quelles vidéos des autres décollent sur nos mots-clés, et pourquoi ? |
+| Veille | Quelles vidéos des autres décollent dans notre niche ? Le site de Viral Bank, dans l'onglet. |
 | Santé | Les sources répondent-elles, l'IA tient-elle (replis, 429, latence), combien coûte la journée ? |
 | SAV | Les fils avec les users, la réponse qui part avec une notif, les retours à traiter ; dessous, les avis sans réponse et les tâches à la main. |
 | Apps de potes | Où sont nos apps et celles des potes dans le top 200 de l'App Store, pays par pays ? |

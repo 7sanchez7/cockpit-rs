@@ -12,7 +12,6 @@ pub mod percee;
 pub mod rond;
 pub mod recherche;
 pub mod sante;
-pub mod veille;
 pub mod videos;
 pub mod widget;
 #[cfg(test)]

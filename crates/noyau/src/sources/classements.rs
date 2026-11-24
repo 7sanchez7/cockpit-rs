@@ -77,7 +77,7 @@ pub struct Classements;
 impl Source for Classements {
     fn id(&self) -> &'static str { ID }
     fn nom(&self) -> &'static str { "Classements" }
-    fn cadence(&self) -> Option<i64> { Some(3 * 3600) }
+    fn cadence(&self) -> i64 { 3 * 3600 }
 
     async fn collecte(&self, ctx: &Contexte) -> Res<usize> {
         let at = jour::maintenant();

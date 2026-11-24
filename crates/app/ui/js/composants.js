@@ -24,7 +24,7 @@
 //   avatar(business | null, { mini }), miniature(cles, { plateforme, largeur, hauteur, rayon })
 //   ligneFil(evenement, { jour }), caseRonde({ faite, alerte, quandClic })
 //   boutonRelancer(enCours, quandClic)   relance une source (Santé, SAV)
-//   actualiser(...sources)          rafraîchit les seules sources d'un panneau (RESEAUX : les quatre réseaux) ; jamais la veille
+//   actualiser(...sources)          rafraîchit les seules sources d'un panneau (RESEAUX : les quatre réseaux)
 //   suivreCollecte(sources, enCours)   app.js donne l'état de la collecte ; les boutons actualiser affichés suivent
 
 import * as F from "./format.js";
@@ -530,7 +530,7 @@ export function miniature(cles, { plateforme, largeur, hauteur, rayon } = {}) {
 
 // fil et tâches
 
-const TAGS = { ESSAI: "var(--succes)", ACHAT: "var(--succes)", RANG: "var(--succes)", IA: "var(--ambre)", VEILLE: "var(--ambre)" };
+const TAGS = { ESSAI: "var(--succes)", ACHAT: "var(--succes)", RANG: "var(--succes)", IA: "var(--ambre)" };
 
 /** Une ligne du fil : heure, tag, texte, et la flèche si l'événement a un lien. */
 export function ligneFil(ev, { jour = false } = {}) {

@@ -69,9 +69,9 @@ impl Collecteur {
         }
     }
 
-    /// Relance tout de suite une source, ou toutes celles qui ont une cadence (Ctrl R, bouton de Santé).
+    /// Relance tout de suite une source, ou toutes (Ctrl R, bouton de Santé).
     pub fn relancer(self: &Arc<Self>, id: Option<&str>) {
-        for s in self.sources.iter().filter(|s| id.map_or(s.cadence().is_some(), |i| s.id() == i)) {
+        for s in self.sources.iter().filter(|s| id.is_none_or(|i| s.id() == i)) {
             self.lancer_en_fond(s.clone());
         }
     }
@@ -94,9 +94,8 @@ impl Collecteur {
     }
 
     fn a_echeance(&self, s: &dyn Source, maintenant: &Date) -> bool {
-        let Some(cadence) = s.cadence() else { return false };
         match self.store.dernier_passage(s.id()) {
-            Ok(Some(d)) => a_echeance(&d, cadence, s.reprise(), maintenant),
+            Ok(Some(d)) => a_echeance(&d, s.cadence(), s.reprise(), maintenant),
             _ => true,
         }
     }
@@ -108,7 +107,7 @@ impl Collecteur {
     }
 
     /// Marque `id` en cours jusqu'à ce que la réservation tombe ; None s'il l'est déjà.
-    pub fn reserver(self: &Arc<Self>, id: &str) -> Option<Reservation> {
+    fn reserver(self: &Arc<Self>, id: &str) -> Option<Reservation> {
         if !self.en_cours.lock().insert(id.to_string()) {
             return None;
         }
@@ -172,9 +171,8 @@ impl Collecteur {
     }
 }
 
-/// Une source est due quand sa cadence (ou son délai de reprise après un échec, s'il est plus court) est écoulée.
-/// Une source (ou une demande de veille) marquée en cours ; elle cesse de l'être quand la réservation tombe.
-pub struct Reservation {
+/// Une source marquée en cours ; elle cesse de l'être quand la réservation tombe.
+struct Reservation {
     collecteur: Arc<Collecteur>,
     id: String,
 }
@@ -186,6 +184,7 @@ impl Drop for Reservation {
     }
 }
 
+/// Une source est due quand sa cadence (ou son délai de reprise après un échec, s'il est plus court) est écoulée.
 pub fn a_echeance(dernier: &Passage, cadence: i64, reprise: i64, maintenant: &Date) -> bool {
     let delai = if dernier.etat == EtatPassage::Ok { cadence } else { cadence.min(reprise) };
     dernier.debut + Duration::seconds(delai) <= *maintenant
@@ -213,24 +212,6 @@ mod tests {
         assert!(a_echeance(&passage(EtatPassage::Erreur, 700), 3600, 600, &m));
         assert!(a_echeance(&passage(EtatPassage::Ok, 3601), 3600, 600, &m));
         assert!(!a_echeance(&passage(EtatPassage::NonConfigure, 100), 300, 600, &m));
-    }
-
-    struct Sans(Option<i64>);
-
-    #[async_trait::async_trait]
-    impl Source for Sans {
-        fn id(&self) -> &'static str { if self.0.is_some() { "auto" } else { "main" } }
-        fn nom(&self) -> &'static str { "x" }
-        fn cadence(&self) -> Option<i64> { self.0 }
-        async fn collecte(&self, _: &Contexte) -> Res<usize> { Ok(0) }
-    }
-
-    #[test]
-    fn sans_cadence_jamais_due() {
-        let c = Collecteur::new(Arc::new(Store::memoire().unwrap()), vec![], Arc::new(super::super::hote::SansInterface));
-        let m = jour::maintenant();
-        assert!(c.a_echeance(&Sans(Some(60)), &m));
-        assert!(!c.a_echeance(&Sans(None), &m));
     }
 
     #[test]

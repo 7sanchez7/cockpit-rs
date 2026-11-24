@@ -2,7 +2,7 @@
 
 Une fiche par source : d'où viennent les chiffres, avec quelles requêtes, ce qui est écrit, ce qui peut casser, et ce qui change par rapport à la version Swift. Le contrat commun, les sessions, les secrets et la config des business sont dans [`../collecte.md`](../collecte.md) ; les tables, dans [`../donnees.md`](../donnees.md).
 
-Les 13 sources du registre (`sources::toutes()`, `crates/noyau/src/sources/mod.rs`), dans l'ordre de Santé :
+Les 12 sources du registre (`sources::toutes()`, `crates/noyau/src/sources/mod.rs`), dans l'ordre de Santé :
 
 | Fiche | `id` | Fichier | Cadence | Service | Écrit |
 |---|---|---|---|---|---|
@@ -18,10 +18,11 @@ Les 13 sources du registre (`sources::toutes()`, `crates/noyau/src/sources/mod.r
 | [firebase.md](firebase.md) | `firebase` | `firebase/` | 15 min | Firestore et Identity Toolkit de l'app, par les identifiants Google par défaut (gcloud) ; FCM pour les réponses du SAV, envoyées depuis l'écran SAV | charge et coût IA, messages ouverts, retours nouveaux, tâches, fils IA, messages et retours, tables `sav_*` |
 | [classements-itunes.md](classements-itunes.md) | `classements` | `classements.rs` | 3 h | iTunes : `viewTop`, flux RSS en repli, `lookup` | apps, rangs dans le top 200, note et nombre de notes, fil des rangs |
 | [notes.md](notes.md) | `notes` | `notes.rs` | 1 min | app Notes de macOS, en local (Mac seulement) | plan de l'Accueil |
-| [veille.md](veille.md) | `veille` | `veille/` | à la main | page TikTok et Instagram cachée dans l'app, yt-dlp, Claude | vidéos, relevés, comptes et analyses de la veille, coût des analyses, fil de la veille |
 
 Les fichiers sont dans `crates/noyau/src/sources/`.
 
 ## Hors registre
 
 [couts.md](couts.md) : les prix avec lesquels Firebase convertit la charge IA en euros (`firebase/cout.rs`). Ce n'est pas une source.
+
+[veille.md](veille.md) : la veille est le site de Viral Bank ; l'ancien moteur est retiré.

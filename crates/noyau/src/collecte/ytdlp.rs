@@ -74,14 +74,9 @@ pub async fn tenir_a_jour(http: &Http) -> Res<()> {
     Ok(())
 }
 
-/// `yt-dlp --flat-playlist -J` : les vidéos d'une page de profil (les `fin` dernières si donné), sans les ouvrir une par une.
-pub async fn liste(url: &str, fin: Option<usize>) -> Res<Vec<u8>> {
-    let mut a: Vec<String> = vec!["--flat-playlist".into(), "-J".into()];
-    if let Some(n) = fin {
-        a.extend(["--playlist-end".into(), n.to_string()]);
-    }
-    a.push(url.into());
-    commande::lancer("yt-dlp", &a).await
+/// `yt-dlp --flat-playlist -J` : les vidéos d'une page de profil, sans les ouvrir une par une.
+pub async fn liste(url: &str) -> Res<Vec<u8>> {
+    commande::lancer("yt-dlp", &["--flat-playlist", "-J", url]).await
 }
 
 /// `yt-dlp -j` sur quelques vidéos : une ligne JSON complète par vidéo (date, durée, likes).

@@ -1,5 +1,5 @@
 //! `cargo run -p noyau --example essai -- <Source>` : une collecte contre les vraies API sur `.cache/essai.sqlite`,
-//! avec la graine de la machine, puis ce qu'elle a écrit. Sans interface : ni notification, ni navigateur caché.
+//! avec la graine de la machine, puis ce qu'elle a écrit. Sans interface : pas de notification.
 use noyau::collecte::collecteur::Collecteur;
 use noyau::collecte::hote::SansInterface;
 use noyau::db::Valeur;

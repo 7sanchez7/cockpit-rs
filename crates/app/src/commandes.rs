@@ -1,5 +1,5 @@
 //! Les commandes communes à tous les écrans : état de la fenêtre, réglages, collecte, sessions, liens.
-use crate::hote::{Pages, AGENT};
+use crate::hote::AGENT;
 use crate::Etat;
 use noyau::collecte::collecteur::REGLAGE_PAUSE;
 use noyau::modeles::Passage;
@@ -49,10 +49,6 @@ pub struct SourceFenetre {
     nom: &'static str,
     passage: Option<Passage>,
 }
-
-/// Le canal du navigateur caché (`plugin:veille|message`), ouvert aux pages distantes par capabilities/veille.json.
-#[tauri::command]
-pub fn message(pages: State<'_, Pages>, page: String, cle: String, texte: String) { pages.recevoir(&page, &cle, texte) }
 
 #[tauri::command]
 pub async fn etat(etat: State<'_, Etat>) -> Rep<EtatFenetre> {

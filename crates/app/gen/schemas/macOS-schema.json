@@ -2641,24 +2641,6 @@
           "type": "string",
           "const": "opener:deny-reveal-item-in-dir",
           "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
-        },
-        {
-          "description": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-message`",
-          "type": "string",
-          "const": "veille:default",
-          "markdownDescription": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-message`"
-        },
-        {
-          "description": "Enables the message command without any pre-configured scope.",
-          "type": "string",
-          "const": "veille:allow-message",
-          "markdownDescription": "Enables the message command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the message command without any pre-configured scope.",
-          "type": "string",
-          "const": "veille:deny-message",
-          "markdownDescription": "Denies the message command without any pre-configured scope."
         }
       ]
     },
