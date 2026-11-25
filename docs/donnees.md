@@ -275,6 +275,8 @@ L'arbre des installs de l'écran Data et les ronds de ses nœuds ; `porte` n'est
 | `business`, `jour`, `porte` | jour à Paris et porte du paywall (`properties.source` de l'événement `paywall`, vide pour les anciennes versions) |
 | `vues`, `essais`, `directs` | paywalls vus, essais gratuits, achats sans essai |
 
+`cockpit sql` les lit aussi aplaties : `v_install` (install + paiement, une colonne par dimension), `v_cohorte` (taux par semaine d'install), `v_jour` (`serie` pivotée), voir [`cli.md`](cli.md) § Vues.
+
 Les colonnes `commence` à `dernier_rond` sont venues après la table : une ligne d'avant les a à 0 ou nulles jusqu'au passage horaire suivant de PostHog, qui réécrit les 97 jours.
 
 ### `evenement`
@@ -292,7 +294,7 @@ Les événements de l'app un par un, avec leurs propriétés : tout ce que l'éc
 
 Index : `(business, nom, jour)` et `(business, personne, at)`. Pas de purge : environ 420 octets par événement, index compris ; 120 Mo pour les 300 000 événements du 16 août au 20 nov. 2026, et environ 5 Mo par jour (12 000 événements) en novembre.
 
-Pour interroger : `cockpit sql "<select>"` ([`cli.md`](cli.md)), ou `sqlite3 -readonly "<base>"` (chemin en tête de ce fichier). Une propriété se lit par `json_extract(props, '$.elapsed_s')`. Exemples :
+Pour interroger : `cockpit schema evenement` d'abord (les événements récents et les clés de leurs `props`), puis `cockpit sql "<select>"` ([`cli.md`](cli.md)), ou `sqlite3 -readonly "<base>"` (chemin en tête de ce fichier). Une propriété se lit par `json_extract(props, '$.elapsed_s')`. Exemples :
 
 ```sql
 -- ronds finis et durée médiane approchée par jour

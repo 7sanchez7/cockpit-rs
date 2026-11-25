@@ -4,7 +4,9 @@
 //! Installer, sur Mac comme sur Windows : `cargo install --path crates/cli`, puis `cockpit` est dans
 //! `~/.cargo/bin` (`%USERPROFILE%\.cargo\bin` sous Windows). La sortie est en UTF-8 sans couleur ANSI ; la console
 //! Windows l'affiche telle quelle.
-use noyau::db::{Database, Valeur};
+mod analyse;
+
+use noyau::db::Valeur;
 use noyau::jour::{self, Date};
 use noyau::lecture::{format, Lectures};
 use noyau::store::Store;
@@ -13,8 +15,9 @@ use noyau::{p, Erreur, Res};
 const USAGE: &str = "\
 cockpit etat                                 sources, derniers événements
 cockpit videos [n]                           nos vidéos, plus récentes d'abord
-cockpit sql \"<select>\" [--tout] [--csv]      lecture seule ; 50 lignes coupées à 60 caractères, sauf --tout ;
-                                             --csv sort tout en CSV";
+cockpit schema [table|vue]                   tables, vues v_*, conventions : à lire avant un select
+cockpit sql \"<select>\" [--tout] [--csv]      lecture seule, vues v_install, v_jour, v_cohorte comprises ;
+                                             50 lignes coupées à 60 caractères, sauf --tout ; --csv sort tout en CSV";
 
 fn erreur(m: &str) -> Erreur { Erreur::Commande(m.into()) }
 
@@ -90,6 +93,16 @@ fn cellule(v: &Valeur) -> String {
     }
 }
 
+/// Une cellule de tableau : un réel garde 4 décimales au plus (`0.3333`), le CSV garde tout.
+fn affichee(v: &Valeur) -> String {
+    if let Valeur::Reel(r) = v {
+        let court = format!("{r:.4}");
+        let court = court.trim_end_matches('0');
+        if r.is_finite() && r.fract() != 0.0 && !court.ends_with('.') { return court.into() }
+    }
+    cellule(v)
+}
+
 fn sql(args: &mut Args) -> Res<()> {
     let csv = args.drapeau("--csv");
     let tout = csv || args.drapeau("--tout");
@@ -100,9 +113,7 @@ fn sql(args: &mut Args) -> Res<()> {
     if !(debut.starts_with("select") || debut.starts_with("with")) || sans_dernier.contains(';') {
         return Err(erreur("un seul select ou with"));
     }
-    let chemin = noyau::chemins::base();
-    let chemin = chemin.to_str().ok_or_else(|| erreur("chemin de la base illisible"))?;
-    let (colonnes, lignes) = Database::ouvrir(chemin, true)?.tableau(requete)?;
+    let (colonnes, lignes) = analyse::base()?.tableau(requete)?;
     if csv {
         println!("{}", colonnes.iter().map(|c| champ_csv(c)).collect::<Vec<_>>().join(","));
         for l in &lignes { println!("{}", l.iter().map(|v| champ_csv(&cellule(v))).collect::<Vec<_>>().join(",")); }
@@ -113,7 +124,7 @@ fn sql(args: &mut Args) -> Res<()> {
     let max = if tout { lignes.len() } else { 50 };
     for l in lignes.iter().take(max) {
         println!("{}", l.iter()
-            .map(|v| if tout { cellule(v).replace('\n', " ") } else { ligne(Some(&cellule(v)), 60) })
+            .map(|v| if tout { affichee(v).replace('\n', " ") } else { ligne(Some(&affichee(v)), 60) })
             .collect::<Vec<_>>().join(" | "));
     }
     if lignes.len() > max { println!("… {} de plus, --tout pour tout voir", lignes.len() - max); }
@@ -133,12 +144,19 @@ fn lancer(commande: &str, args: &mut Args) -> Res<bool> {
         "etat" => etat(&store, &l)?,
         "videos" => videos(&l, args)?,
         "sql" => sql(args)?,
+        "schema" => analyse::schema(&analyse::base()?, args.premier())?,
         _ => return Ok(false),
     }
     Ok(true)
 }
 
 fn main() {
+    // `cockpit … | head` : la sortie fermée n'est pas une erreur
+    let defaut = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if info.payload_as_str().is_some_and(|m| m.contains("Broken pipe")) { std::process::exit(0) }
+        defaut(info)
+    }));
     let mut args = Args(std::env::args().skip(1).collect());
     if args.0.is_empty() {
         println!("{USAGE}");
@@ -191,6 +209,15 @@ mod tests {
         assert_eq!(cellule(&Valeur::Reel(3.0)), "3.0");
         assert_eq!(cellule(&Valeur::Reel(0.5)), "0.5");
         assert_eq!(cellule(&Valeur::Blob(vec![0; 16])), "16 bytes");
+    }
+
+    #[test]
+    fn reels_arrondis() {
+        assert_eq!(affichee(&Valeur::Reel(1.0 / 3.0)), "0.3333");
+        assert_eq!(affichee(&Valeur::Reel(0.5)), "0.5");
+        assert_eq!(affichee(&Valeur::Reel(3.0)), "3.0");
+        assert_eq!(affichee(&Valeur::Reel(0.00002)), "0.00002");
+        assert_eq!(affichee(&Valeur::Int(7)), "7");
     }
 
     #[test]
